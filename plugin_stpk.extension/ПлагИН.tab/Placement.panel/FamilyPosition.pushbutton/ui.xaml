@@ -1,0 +1,86 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Размещение семейств"
+        Width="840" Height="600"
+        MinWidth="660" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="12">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="1.2*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- ЛЕВАЯ КОЛОНКА: семейства -->
+    <Grid Grid.Column="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+        <TextBlock Text="Семейства проекта" VerticalAlignment="Center"/>
+        <Button x:Name="btn_all" Content="Выделить всё" Width="90" Height="22"
+                Margin="10,0,0,0"/>
+        <Button x:Name="btn_none" Content="Снять всё" Width="90" Height="22"
+                Margin="6,0,0,0"/>
+      </StackPanel>
+
+      <CheckBox Grid.Row="1" x:Name="chk_only" Content="Только выбранные"
+                HorizontalAlignment="Left" Margin="0,0,0,6"/>
+
+      <TextBox Grid.Row="2" x:Name="tb_search" Height="24" Margin="0,0,0,6"
+               ToolTip="Фильтр списка семейств по имени (вводите часть имени)"/>
+
+      <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+                    BorderBrush="#FFABADB3" BorderThickness="1">
+        <StackPanel x:Name="pnl_families" Margin="4"/>
+      </ScrollViewer>
+    </Grid>
+
+    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
+                  VerticalAlignment="Stretch" Background="Transparent"/>
+
+    <!-- ПРАВАЯ КОЛОНКА: место размещения -->
+    <Grid Grid.Column="2">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <GroupBox Grid.Row="0" Header="Место размещения" Padding="10">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" x:Name="lbl_link" Text="Файл связи"/>
+          <ComboBox Grid.Row="1" x:Name="cb_link" Height="24" Margin="0,4,0,10"/>
+
+          <TextBlock Grid.Row="2" Text="Уровень (проекта)"/>
+          <ComboBox Grid.Row="3" x:Name="cb_level" Height="24" Margin="0,4,0,10"/>
+
+          <TextBlock Grid.Row="4" Text="Помещения (в связи) — Ctrl/Shift для мультивыбора"/>
+          <ListBox Grid.Row="5" x:Name="cb_room" SelectionMode="Extended"
+                   Height="170" Margin="0,4,0,10"/>
+        </Grid>
+      </GroupBox>
+
+      <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+        <Button x:Name="btn_place" Content="Разместить" Width="130" Height="30"
+                IsEnabled="False" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+        <TextBlock x:Name="lbl_status" Text="" TextWrapping="Wrap" Margin="0,0,0,10"/>
+        <Button x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
+                HorizontalAlignment="Right" IsCancel="True"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

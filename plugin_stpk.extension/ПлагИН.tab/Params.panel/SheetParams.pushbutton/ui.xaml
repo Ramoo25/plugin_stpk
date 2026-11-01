@@ -1,0 +1,102 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Параметры листов и видов"
+        Width="860" Height="600"
+        MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="12">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="1.3*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- ЛЕВАЯ КОЛОНКА: списки -->
+    <Grid Grid.Column="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Text="Листы проекта" Margin="0,0,0,6"/>
+      <ListBox Grid.Row="1" x:Name="lst_sheets"
+               Margin="0,0,8,14"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+
+      <TextBlock Grid.Row="2" Text="Виды на листе" Margin="0,0,0,6"/>
+      <ListBox Grid.Row="3" x:Name="lst_views"
+               Margin="0,0,8,0"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+    </Grid>
+
+    <!-- ПРАВАЯ КОЛОНКА: поля редактирования -->
+    <Grid Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <GroupBox Grid.Row="0" Header="Параметры листа" Padding="10" Margin="0,0,0,14">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Text="Номер листа"/>
+          <TextBox Grid.Row="1" x:Name="txt_sheet_num" Height="24" Margin="0,4,0,10"/>
+          <TextBlock Grid.Row="2" Text="Имя листа"/>
+          <TextBox Grid.Row="3" x:Name="txt_sheet_name" Height="24" Margin="0,4,0,10"/>
+
+          <StackPanel Grid.Row="4" Orientation="Vertical">
+            <TextBlock Text="ADSK_Штамп титульный_Наименование документа" TextWrapping="Wrap"/>
+            <TextBox x:Name="txt_sheet_adsk" Height="24" Margin="0,4,0,10"
+                     TextWrapping="NoWrap"/>
+          </StackPanel>
+
+          <Button Grid.Row="5" x:Name="btn_save_sheet" Content="Сохранить"
+                  Width="110" Height="26" HorizontalAlignment="Left"
+                  IsEnabled="False" Margin="0,0,0,4"/>
+        </Grid>
+      </GroupBox>
+
+      <GroupBox Grid.Row="1" Header="Параметры вида" Padding="10">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Text="Имя вида"/>
+          <TextBox Grid.Row="1" x:Name="txt_view_name" Height="24" Margin="0,4,0,10"/>
+          <TextBlock Grid.Row="2" Text="Заголовок на листе"/>
+          <TextBox Grid.Row="3" x:Name="txt_view_title" Height="24" Margin="0,4,0,10"/>
+          <TextBlock Grid.Row="4" Text="Масштаб (1:X)"/>
+          <TextBox Grid.Row="5" x:Name="txt_view_scale" Height="24" Margin="0,4,0,10"/>
+
+          <Button Grid.Row="6" x:Name="btn_save_view" Content="Сохранить"
+                  Width="110" Height="26" HorizontalAlignment="Left"
+                  IsEnabled="False" Margin="0,0,0,4"/>
+        </Grid>
+      </GroupBox>
+
+      <StackPanel Grid.Row="2" VerticalAlignment="Bottom">
+        <TextBlock x:Name="lbl_status" Text="" TextWrapping="Wrap" Margin="0,0,0,8"/>
+        <Button x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
+                HorizontalAlignment="Right" IsCancel="True"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

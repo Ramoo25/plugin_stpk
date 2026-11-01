@@ -14,12 +14,16 @@ GetBoundarySegments, пересчёт координат RevitLinkInstance.GetTo
 в помещение независимо от общих координат, смещения и поворота связи.
 """
 
+import os
 import random
 import re
 
 from pyrevit import revit, forms, script, DB
 
 # WPF-обёртки (Revit уже загрузил PresentationFramework)
+import clr
+clr.AddReference("PresentationFramework")
+from Microsoft.Win32 import OpenFileDialog
 from System.Windows import (Visibility, Thickness, TextTrimming,
                             VerticalAlignment)
 from System.Windows.Controls import (CheckBox, ComboBox, Orientation,
@@ -243,6 +247,18 @@ def family_host_hint(fam):
         return u""
 
 
+class _FamilyLoadOptions(DB.IFamilyLoadOptions):
+    """Тихая загрузка семейства: молча заменяем существующее,
+    включая перезапись значений параметров (без штатных вопросов)."""
+
+    def OnFamilyFound(self, familyInUse, overwriteParameterValues):
+        return True
+
+    def OnSharedFamilyFound(self, sharedFamily, familyInUse, source,
+                            overwriteParameterValues):
+        return True
+
+
 class PlacementForm(forms.WPFWindow):
     def __init__(self):
         forms.WPFWindow.__init__(self, "ui.xaml")
@@ -285,13 +301,16 @@ class PlacementForm(forms.WPFWindow):
         self.tb_search.TextChanged += self._on_search_changed
         self.chk_only.Checked += self._on_only_selected_changed
         self.chk_only.Unchecked += self._on_only_selected_changed
+        self.btn_load.Click += self._load_families
         self.btn_place.Click += self._place
         self.btn_close.Click += self._close
 
         self._set_status(u"")
 
     # ---------- левая колонка: строки семейств ----------
-    def _build_family_rows(self):
+    def _build_family_rows(self, checked_ids=None):
+        """Строит строки списка; checked_ids - множество id семейств,
+        у которых надо сохранить отмеченный чекбокс (после загрузки)."""
         self.pnl_families.Children.Clear()
         self._rows = []
         for fam, fam_label, symbols in self._families:
@@ -330,6 +349,13 @@ class PlacementForm(forms.WPFWindow):
             self._rows.append(
                 (row, chk, label, combo, fam, symbols))
 
+            if checked_ids:
+                try:
+                    if fam.Id.IntegerValue in checked_ids:
+                        chk.IsChecked = True
+                except Exception:
+                    pass
+
     def _checked_rows(self):
         """[(Family, FamilySymbol или None, подпись)] по отмеченным."""
         result = []
@@ -362,6 +388,74 @@ class PlacementForm(forms.WPFWindow):
     def _on_search_changed(self, sender, args):
         """Динамический фильтр списка семейств по части имени."""
         self._refresh_family_visibility()
+
+    def _load_families(self, sender, args):
+        """Кнопка «Загрузить» (Загрузить из файла .rfa)."""
+        try:
+            dlg = OpenFileDialog()
+            dlg.Title = u"Выберите семейства для загрузки"
+            dlg.Filter = u"Семейства Revit (*.rfa)|*.rfa"
+            dlg.Multiselect = True
+            if dlg.ShowDialog() is not True:
+                return
+            paths = list(dlg.FileNames)
+            if not paths:
+                return
+
+            # запоминаем отмеченные семейства, чтобы не потерять после
+            # перестроения списка
+            checked_ids = set()
+            for row, chk, label, combo, fam, symbols in self._rows:
+                if bool(chk.IsChecked):
+                    try:
+                        checked_ids.add(fam.Id.IntegerValue)
+                    except Exception:
+                        pass
+
+            loaded = []
+            failed = []
+            # если интерфейс опций удалось создать - загрузка пройдёт без
+            # штатных вопросов Revit о замене существующих семейств
+            try:
+                load_opts = _FamilyLoadOptions()
+            except Exception:
+                load_opts = None
+            with revit.Transaction(u"ПлагИН: загрузка семейств", doc):
+                for path in paths:
+                    name = os.path.splitext(os.path.basename(path))[0]
+                    try:
+                        if load_opts is not None:
+                            ok = doc.LoadFamily(path, load_opts)
+                        else:
+                            ok = doc.LoadFamily(path)
+                        if ok:
+                            loaded.append(name)
+                        else:
+                            failed.append((name, u"не удалось загрузить"))
+                    except Exception as exc:
+                        failed.append((name, str(exc)))
+
+            # новый список семейств с сохранением отметок
+            self._families = collect_families(doc)
+            self._build_family_rows(checked_ids)
+            self._refresh_family_visibility()
+            self._refresh_place_enabled(None, None)
+
+            status = u"Загружено: {}".format(len(loaded))
+            if loaded:
+                status += u": " + u", ".join(loaded[:5])
+                if len(loaded) > 5:
+                    status += u", ..."
+            if failed:
+                status += u"\nНе загрузилось: {}".format(len(failed))
+                for name, why in failed[:5]:
+                    status += u"\n- {}: {}".format(name, why)
+                if len(failed) > 5:
+                    status += u"\n- ... и ещё {}".format(len(failed) - 5)
+            self._set_status(status)
+        except Exception as exc:
+            logger.error("Placement: загрузка семейств: %s", exc)
+            self._set_status(u"(ошибка загрузки: см. лог)")
 
     def _on_only_selected_changed(self, sender, args):
         """Чекбокс «Только выбранные»: строки = отмеченные семейства,

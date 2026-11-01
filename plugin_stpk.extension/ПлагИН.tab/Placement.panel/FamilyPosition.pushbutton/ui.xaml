@@ -29,8 +29,13 @@
                 Margin="6,0,0,0"/>
       </StackPanel>
 
-      <CheckBox Grid.Row="1" x:Name="chk_only" Content="Только выбранные"
-                HorizontalAlignment="Left" Margin="0,0,0,6"/>
+      <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+        <CheckBox x:Name="chk_only" Content="Только выбранные"
+                  VerticalAlignment="Center"/>
+        <Button x:Name="btn_load" Content="Загрузить" Width="90" Height="24"
+                Margin="14,0,0,0"
+                ToolTip="Загрузить семейство (.rfa) из файла в проект"/>
+      </StackPanel>
 
       <TextBox Grid.Row="2" x:Name="tb_search" Height="24" Margin="0,0,0,6"
                ToolTip="Фильтр списка семейств по имени (вводите часть имени)"/>

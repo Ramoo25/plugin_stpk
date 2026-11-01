@@ -338,7 +338,9 @@ class SheetParamsForm(forms.WPFWindow):
                 if old_name != name:
                     view.Name = name
                 if new_scale is not None and old_scale != new_scale:
-                    old_scale_p.Set(new_scale)
+                    # VIEW_SCALE - read-only; масштаб пишется свойством
+                    # View.Scale (проверено в №4, Revit 2022)
+                    view.Scale = new_scale
 
             # пересобрать список видов, выделение вернуть по Id
             self._views = collect_sheet_views(doc, self._sheet)

@@ -1,0 +1,8 @@
+title:
+  ru: Масштаб видов
+  en_us: View Scale
+tooltip:
+  ru: Иерархический список «листы - виды на них» с чекбоксами; установка
+    одного масштаба у всех отмеченных видов (без легенд и спецификаций).
+  en_us: Hierarchical list of sheets with placed views; set one scale for
+    all checked views (schedules and legends excluded).

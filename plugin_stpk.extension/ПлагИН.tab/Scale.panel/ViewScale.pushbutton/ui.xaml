@@ -19,7 +19,6 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
@@ -50,9 +49,13 @@
                  ToolTip="Исключение: скрываются листы/виды, где есть хотя бы одно из слов (несколько слов - через запятую)"/>
       </Grid>
 
-      <CheckBox Grid.Row="3" x:Name="chk_only" Content="Только выбранные"
-                HorizontalAlignment="Left" Margin="0,0,0,6"
-                ToolTip="Показать только виды с отметкой; обе поля фильтра игнорируются"/>
+      <StackPanel Grid.Row="3" Orientation="Horizontal">
+        <CheckBox x:Name="chk_only" Content="Только выбранные"
+                  ToolTip="Показать только виды с отметкой; оба поля фильтра игнорируются"/>
+        <CheckBox x:Name="chk_pick" Content="Выбрать видимые"
+                  ToolTip="Отметить все виды, видимые в списке после фильтрации;
+повторить можно сняв и снова поставив галочку"/>
+      </StackPanel>
 
       <Border Grid.Row="4" BorderBrush="#FFABADB3" BorderThickness="1">
         <TreeView x:Name="tv_views" BorderThickness="0"

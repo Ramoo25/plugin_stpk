@@ -107,20 +107,27 @@ def collect_sheets(doc):
 
 
 def collect_sheet_views(doc, sheet):
-    """Все виды на листе, кроме легенд и спецификаций.
+    """Все виды на листе, кроме легенд, спецификаций и чертёжных видов.
 
-    [(подпись, view)], натурально по имени вида. Спецификации
-    (ViewSchedule) сюда и без того почти не попадают из GetAllPlacedViews,
-    но отсеиваем явно вместе с легендами (ViewLegend).
+    [(подпись, view)], натурально по имени вида.
+    Отсев по ViewType: Legend (легенды - отдельного класса ViewLegend
+    в API 2022 нет), DraftingView (чертёжные виды), Schedule /
+    ColumnSchedule / PanelSchedule / PresetSchedule (спецификации).
     """
+    skip_view_types = frozenset((
+        DB.ViewType.Legend,
+        DB.ViewType.DraftingView,
+        DB.ViewType.Schedule,
+        DB.ViewType.ColumnSchedule,
+        DB.ViewType.PanelSchedule,
+    ))
     items = []
     for view_id in sheet.GetAllPlacedViews():
         view = doc.GetElement(view_id)
         if view is None:
             continue
         try:
-            if (isinstance(view, DB.ViewSchedule)
-                    or isinstance(view, DB.ViewLegend)):
+            if view.ViewType in skip_view_types:
                 continue
         except Exception:
             pass
@@ -169,6 +176,9 @@ class ScaleForm(forms.WPFWindow):
         self._tree = []
 
         self._build_tree()
+        # на старте работаем тем же механизмом видимости: листы без видов
+        # (или с полностью скрытыми видами) сразу не показываются
+        self._refresh_tree_visibility()
         self._refresh_counts()
 
         self.cb_scale.ItemsSource = list(STANDARD_SCALES)
@@ -183,6 +193,7 @@ class ScaleForm(forms.WPFWindow):
         self.tb_exclude.TextChanged += self._on_search_changed
         self.chk_only.Checked += self._on_only_selected_changed
         self.chk_only.Unchecked += self._on_only_selected_changed
+        self.chk_pick.Checked += self._on_pick_visible
 
         self._set_status(u"")
 
@@ -229,11 +240,34 @@ class ScaleForm(forms.WPFWindow):
         only_checked = bool(self.chk_only.IsChecked)
         self.tb_search.IsEnabled = not only_checked
         self.tb_exclude.IsEnabled = not only_checked
+        # в режиме «только выбранные» видимые = отмеченные, действие
+        # «Выбрать видимые» там не даст ничего нового
+        self.chk_pick.IsEnabled = not only_checked
         self._refresh_tree_visibility()
         if only_checked and not self._selected_views():
             self._set_status(
                 u"«Только выбранные»: пока нет ни одного отмеченного "
                 u"вида - поставьте галочки в дереве.")
+
+    def _on_pick_visible(self, sender, args):
+        """Чекбокс «Выбрать видимые»: отметка всех видов, видимых после
+        фильтрации (действие при включении; режим не удерживается)."""
+        if not bool(self.chk_pick.IsChecked):
+            return
+        count = 0
+        for node, sheet_label, leaves in self._tree:
+            if node.Visibility != Visibility.Visible:
+                continue
+            for leaf, chk, view_label in leaves:
+                if leaf.Visibility != Visibility.Visible:
+                    continue
+                if not bool(chk.IsChecked):
+                    try:
+                        chk.IsChecked = True
+                        count += 1
+                    except Exception:
+                        pass
+        self._set_status(u"Отмечено видимых видов: {}".format(count))
 
     def _refresh_tree_visibility(self):
         """Видимость узлов дерева: фильтры «Содержит»/«НЕ содержит»

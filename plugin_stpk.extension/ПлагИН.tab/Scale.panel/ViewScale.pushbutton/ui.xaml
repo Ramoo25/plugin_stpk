@@ -18,6 +18,8 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
@@ -28,14 +30,31 @@
                 ToolTip="Снять все галочки со всех видов"/>
       </StackPanel>
 
-      <CheckBox Grid.Row="1" x:Name="chk_only" Content="Только выбранные"
+      <Grid Grid.Row="1" Margin="0,0,0,4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Содержит:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Grid.Column="1" x:Name="tb_search" Height="24"
+                 ToolTip="Фильтр: остаются листы/виды, где есть хотя бы одно из слов (несколько слов - через запятую)"/>
+      </Grid>
+
+      <Grid Grid.Row="2" Margin="0,0,0,4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="НЕ содержит:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Grid.Column="1" x:Name="tb_exclude" Height="24"
+                 ToolTip="Исключение: скрываются листы/виды, где есть хотя бы одно из слов (несколько слов - через запятую)"/>
+      </Grid>
+
+      <CheckBox Grid.Row="3" x:Name="chk_only" Content="Только выбранные"
                 HorizontalAlignment="Left" Margin="0,0,0,6"
-                ToolTip="Показать только виды с отметкой; ввод в строке поиска игнорируется"/>
+                ToolTip="Показать только виды с отметкой; обе поля фильтра игнорируются"/>
 
-      <TextBox Grid.Row="2" x:Name="tb_search" Height="24" Margin="0,0,0,6"
-               ToolTip="Фильтр дерева по части имени листа или вида (вводите часть текста)"/>
-
-      <Border Grid.Row="3" BorderBrush="#FFABADB3" BorderThickness="1">
+      <Border Grid.Row="4" BorderBrush="#FFABADB3" BorderThickness="1">
         <TreeView x:Name="tv_views" BorderThickness="0"
                   VirtualizingPanel.IsVirtualizing="False"/>
       </Border>

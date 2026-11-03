@@ -130,6 +130,23 @@ def collect_sheet_views(doc, sheet):
     return items
 
 
+def parse_tokens(text):
+    """Разбор «слов через запятую» -> [слово, ...] (нижний регистр,
+    без пустых и повторов). Пример: « План, Наруж , К1» -> [план, наруж, к1]."""
+    tokens = []
+    for part in (text or u"").split(u","):
+        part = part.strip().lower()
+        if part and part not in tokens:
+            tokens.append(part)
+    return tokens
+
+
+def contains_tokens(text, tokens):
+    """True, если хоть одно слово содержится в тексте (регистр текста
+    уже нижний)."""
+    return any(t in text for t in tokens)
+
+
 def parse_scale(text):
     """Масштаб из введённой строки: «100» или «1:100» -> 100, иначе None."""
     t = (text or u"").strip()
@@ -163,6 +180,7 @@ class ScaleForm(forms.WPFWindow):
         self.btn_close.Click += self._close
         self.cb_scale.SelectionChanged += self._on_scale_picked
         self.tb_search.TextChanged += self._on_search_changed
+        self.tb_exclude.TextChanged += self._on_search_changed
         self.chk_only.Checked += self._on_only_selected_changed
         self.chk_only.Unchecked += self._on_only_selected_changed
 
@@ -207,9 +225,10 @@ class ScaleForm(forms.WPFWindow):
 
     def _on_only_selected_changed(self, sender, args):
         """Чекбокс «Только выбранные»: дерево = отмеченные виды,
-        текстовый фильтр при этом игнорируется и гаснет."""
+        оба текстовых фильтра при этом игнорируются и гаснут."""
         only_checked = bool(self.chk_only.IsChecked)
         self.tb_search.IsEnabled = not only_checked
+        self.tb_exclude.IsEnabled = not only_checked
         self._refresh_tree_visibility()
         if only_checked and not self._selected_views():
             self._set_status(
@@ -217,29 +236,52 @@ class ScaleForm(forms.WPFWindow):
                 u"вида - поставьте галочки в дереве.")
 
     def _refresh_tree_visibility(self):
-        """Видимость узлов дерева: фильтр по имени или «только выбранные»."""
+        """Видимость узлов дерева: фильтры «Содержит»/«НЕ содержит»
+        (слова через запятую: «содержит» - хотя бы одно слово,
+        «не содержит» - исключается всё, где встречается хоть одно)
+        или режим «только выбранные»."""
         only_checked = bool(self.chk_only.IsChecked)
-        query = u""
         self.tb_search.IsEnabled = not only_checked
+        self.tb_exclude.IsEnabled = not only_checked
+        includes = []
+        excludes = []
         if not only_checked:
             try:
-                query = unicode(self.tb_search.Text).strip().lower()
+                includes = parse_tokens(self.tb_search.Text)
             except Exception:
-                query = u""
+                includes = []
+            try:
+                excludes = parse_tokens(self.tb_exclude.Text)
+            except Exception:
+                excludes = []
         for node, sheet_label, leaves in self._tree:
-            sheet_match = query in sheet_label.lower()
+            sheet_low = sheet_label.lower()
+            # лист «содержит» — совпадение хотя бы по одному слову
+            # (пустое поле - совпал всегда, показываем как раньше)
+            sheet_match = (not includes
+                           or contains_tokens(sheet_low, includes))
+            # лист с текстом-исключением скрыт целиком
+            sheet_excluded = (excludes != []
+                              and contains_tokens(sheet_low, excludes))
             if only_checked:
                 visible = [t for t in leaves if bool(t[1].IsChecked)]
             elif sheet_match:
-                visible = leaves  # совпал лист - показываем все его виды
+                visible = [t for t in leaves
+                           if not (excludes
+                                   and contains_tokens(t[2].lower(),
+                                                       excludes))]
             else:
                 visible = [t for t in leaves
-                           if query in t[2].lower()]
+                           if contains_tokens(t[2].lower(), includes)
+                           and not (excludes
+                                    and contains_tokens(t[2].lower(),
+                                                        excludes))]
             for leaf, chk, view_label in leaves:
                 leaf.Visibility = (Visibility.Visible
                                    if (leaf, chk, view_label) in visible
                                    else Visibility.Collapsed)
-            node.Visibility = (Visibility.Collapsed if not visible
+            node.Visibility = (Visibility.Collapsed
+                               if (not visible or sheet_excluded)
                                else Visibility.Visible)
 
     def _on_check_changed(self, sender, args):

@@ -18,7 +18,7 @@ import re
 from pyrevit import revit, forms, script, DB
 
 # WPF-обёртки (Revit уже загрузил PresentationFramework)
-from System.Windows import Thickness, VerticalAlignment
+from System.Windows import Thickness, VerticalAlignment, Visibility
 from System.Windows.Controls import (CheckBox, TextBlock, TreeViewItem)
 
 logger = script.get_logger()
@@ -148,6 +148,8 @@ class ScaleForm(forms.WPFWindow):
         self._sheets = collect_sheets(doc)
         # (chk, view, подпись листа) - все чекбоксы видов
         self._checks = []
+        # (узел листа, подпись листа, [(узел вида, чекбокс, имя вида), ...])
+        self._tree = []
 
         self._build_tree()
         self._refresh_counts()
@@ -160,6 +162,9 @@ class ScaleForm(forms.WPFWindow):
         self.btn_apply.Click += self._apply
         self.btn_close.Click += self._close
         self.cb_scale.SelectionChanged += self._on_scale_picked
+        self.tb_search.TextChanged += self._on_search_changed
+        self.chk_only.Checked += self._on_only_selected_changed
+        self.chk_only.Unchecked += self._on_only_selected_changed
 
         self._set_status(u"")
 
@@ -168,12 +173,14 @@ class ScaleForm(forms.WPFWindow):
         """Строит дерево «лист - виды с чекбоксами»."""
         self.tv_views.Items.Clear()
         self._checks = []
+        self._tree = []
         for sheet_label, sheet in self._sheets:
             node = TreeViewItem()
             node.Header = sheet_label
             node.IsExpanded = True
             node.Margin = Thickness(0, 2, 0, 2)
 
+            leaves = []
             for view_label, view in collect_sheet_views(doc, sheet):
                 leaf = TreeViewItem()
                 leaf.Margin = Thickness(0)
@@ -186,12 +193,60 @@ class ScaleForm(forms.WPFWindow):
 
                 leaf.Header = chk
                 node.Items.Add(leaf)
+                leaves.append((leaf, chk, view_label))
                 self._checks.append((chk, view, sheet_label))
 
             self.tv_views.Items.Add(node)
+            self._tree.append((node, sheet_label, leaves))
+
+    # ---------- фильтр дерева ----------
+    def _on_search_changed(self, sender, args):
+        """Динамический фильтр дерева по части имени листа или вида."""
+        if not bool(self.chk_only.IsChecked):
+            self._refresh_tree_visibility()
+
+    def _on_only_selected_changed(self, sender, args):
+        """Чекбокс «Только выбранные»: дерево = отмеченные виды,
+        текстовый фильтр при этом игнорируется и гаснет."""
+        only_checked = bool(self.chk_only.IsChecked)
+        self.tb_search.IsEnabled = not only_checked
+        self._refresh_tree_visibility()
+        if only_checked and not self._selected_views():
+            self._set_status(
+                u"«Только выбранные»: пока нет ни одного отмеченного "
+                u"вида - поставьте галочки в дереве.")
+
+    def _refresh_tree_visibility(self):
+        """Видимость узлов дерева: фильтр по имени или «только выбранные»."""
+        only_checked = bool(self.chk_only.IsChecked)
+        query = u""
+        self.tb_search.IsEnabled = not only_checked
+        if not only_checked:
+            try:
+                query = unicode(self.tb_search.Text).strip().lower()
+            except Exception:
+                query = u""
+        for node, sheet_label, leaves in self._tree:
+            sheet_match = query in sheet_label.lower()
+            if only_checked:
+                visible = [t for t in leaves if bool(t[1].IsChecked)]
+            elif sheet_match:
+                visible = leaves  # совпал лист - показываем все его виды
+            else:
+                visible = [t for t in leaves
+                           if query in t[2].lower()]
+            for leaf, chk, view_label in leaves:
+                leaf.Visibility = (Visibility.Visible
+                                   if (leaf, chk, view_label) in visible
+                                   else Visibility.Collapsed)
+            node.Visibility = (Visibility.Collapsed if not visible
+                               else Visibility.Visible)
 
     def _on_check_changed(self, sender, args):
         self._refresh_counts()
+        # в режиме «Только выбранные» снятая галочка сразу скрывает вид
+        if bool(self.chk_only.IsChecked):
+            self._refresh_tree_visibility()
 
     def _refresh_counts(self):
         """Подпись «Отмечено видов» и доступность «Применить»."""
@@ -246,6 +301,7 @@ class ScaleForm(forms.WPFWindow):
         for chk, view, sheet_label in self._checks:
             if bool(chk.IsChecked):
                 chk.IsChecked = False
+        self._refresh_tree_visibility()
         self._refresh_counts()
 
     def _apply(self, sender, args):

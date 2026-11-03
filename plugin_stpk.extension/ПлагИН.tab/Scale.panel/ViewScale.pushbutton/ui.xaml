@@ -16,6 +16,8 @@
     <Grid Grid.Column="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
@@ -26,7 +28,14 @@
                 ToolTip="Снять все галочки со всех видов"/>
       </StackPanel>
 
-      <Border Grid.Row="1" BorderBrush="#FFABADB3" BorderThickness="1">
+      <CheckBox Grid.Row="1" x:Name="chk_only" Content="Только выбранные"
+                HorizontalAlignment="Left" Margin="0,0,0,6"
+                ToolTip="Показать только виды с отметкой; ввод в строке поиска игнорируется"/>
+
+      <TextBox Grid.Row="2" x:Name="tb_search" Height="24" Margin="0,0,0,6"
+               ToolTip="Фильтр дерева по части имени листа или вида (вводите часть текста)"/>
+
+      <Border Grid.Row="3" BorderBrush="#FFABADB3" BorderThickness="1">
         <TreeView x:Name="tv_views" BorderThickness="0"
                   VirtualizingPanel.IsVirtualizing="False"/>
       </Border>

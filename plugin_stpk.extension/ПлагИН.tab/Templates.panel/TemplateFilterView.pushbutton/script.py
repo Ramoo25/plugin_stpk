@@ -118,6 +118,8 @@ class TemplateFilterForm(forms.WPFWindow):
 
         self.cb_source.SelectionChanged += self._on_template_changed
         self.cb_target.SelectionChanged += self._on_template_changed
+        self.tb_src_search.TextChanged += self._on_src_search_changed
+        self.tb_tgt_search.TextChanged += self._on_tgt_search_changed
         self.tb_search.TextChanged += self._on_search_changed
         self.btn_all.Click += self._check_all
         self.btn_none.Click += self._uncheck_all
@@ -128,6 +130,47 @@ class TemplateFilterForm(forms.WPFWindow):
         self._set_status(u"")
 
     # ---------- списки ----------
+    def _query_of(self, search_box):
+        """Текст «Содержит:» (приведён, обрезан, в нижнем регистре)."""
+        try:
+            return unicode(search_box.Text).strip().lower()
+        except Exception:
+            return u""
+
+    @staticmethod
+    def _matches_all(text, query):
+        """True, если ВСЕ части запроса (через пробел, порядок любой)
+        встречаются в text: «план 3д» находит «3Д план 1 эт»."""
+        parts = query.split()
+        if not parts:
+            return True
+        low = text.lower()
+        return all(part in low for part in parts)
+
+    def _apply_template_filter(self, combo, search_box):
+        """Пересборка выпадающего списка шаблонов по тексту «Содержит:».
+
+        Выбор сохраняется, если шаблон остался в отфильтрованном списке;
+        иначе выбор сбрасывается (список фильтров пересоберётся по событию
+        SelectionChanged)."""
+        query = self._query_of(search_box)
+        selected = combo.SelectedItem
+        names = [t[0] for t in self._templates
+                 if self._matches_all(t[0], query)]
+        combo.ItemsSource = names
+        if selected is not None and selected in names:
+            combo.SelectedItem = selected
+        else:
+            combo.SelectedIndex = -1
+
+    def _on_src_search_changed(self, sender, args):
+        """Фильтр списка «Копируем из шаблона вида»."""
+        self._apply_template_filter(self.cb_source, self.tb_src_search)
+
+    def _on_tgt_search_changed(self, sender, args):
+        """Фильтр списка «Копируем в шаблон вида»."""
+        self._apply_template_filter(self.cb_target, self.tb_tgt_search)
+
     def _selected_view(self, combo):
         """View по выбранному имени в списке (или None)."""
         idx = combo.SelectedIndex
@@ -202,12 +245,9 @@ class TemplateFilterForm(forms.WPFWindow):
 
     def _apply_filter_visibility(self):
         """Видимость строк: скрыть фильтры, не содержащие текст поиска."""
-        try:
-            query = unicode(self.tb_search.Text).strip().lower()
-        except Exception:
-            query = u""
+        query = self._query_of(self.tb_search)
         for row, chk, filter_id, name, exists in self._rows:
-            visible = (query == u"" or query in name.lower())
+            visible = self._matches_all(name, query)
             row.Visibility = (Visibility.Visible if visible
                               else Visibility.Collapsed)
 

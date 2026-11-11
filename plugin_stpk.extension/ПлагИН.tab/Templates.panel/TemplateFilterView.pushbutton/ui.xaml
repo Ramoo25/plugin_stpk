@@ -1,0 +1,69 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ШаблонФильтрВид"
+        Width="720" Height="560"
+        MinWidth="600" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="12">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="0.7*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- ЛЕВАЯ КОЛОНКА: выбор шаблонов и фильтры источника -->
+    <Grid Grid.Column="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Text="Копируем из (ШВ2):"/>
+      <ComboBox Grid.Row="1" x:Name="cb_source" Height="24" Margin="0,4,0,10"/>
+
+      <TextBlock Grid.Row="2" Text="Копируем в (ШВ1):"/>
+      <ComboBox Grid.Row="3" x:Name="cb_target" Height="24" Margin="0,4,0,10"/>
+
+      <StackPanel Grid.Row="4">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+          <TextBlock Text="Фильтры источника" VerticalAlignment="Center"/>
+          <Button x:Name="btn_all" Content="Выделить всё" Width="90" Height="22"
+                  Margin="10,0,0,0"/>
+          <Button x:Name="btn_none" Content="Снять всё" Width="90" Height="22"
+                  Margin="6,0,0,0"/>
+        </StackPanel>
+        <Border BorderBrush="#FFABADB3" BorderThickness="1">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="pnl_filters" Margin="4"/>
+          </ScrollViewer>
+        </Border>
+      </StackPanel>
+    </Grid>
+
+    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
+                  VerticalAlignment="Stretch" Background="Transparent"/>
+
+    <!-- ПРАВАЯ КОЛОНКА: операции -->
+    <Grid Grid.Column="2">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Button Grid.Row="0" x:Name="btn_copy" Content="Копировать"
+              Width="130" Height="30" HorizontalAlignment="Left"
+              IsEnabled="False"
+              ToolTip="Перенести отмеченные фильтры с настройками в шаблон-приёмник"/>
+
+      <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+        <TextBlock x:Name="lbl_status" Text="" TextWrapping="Wrap" Margin="0,0,0,10"/>
+        <Button x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
+                HorizontalAlignment="Right" IsCancel="True"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

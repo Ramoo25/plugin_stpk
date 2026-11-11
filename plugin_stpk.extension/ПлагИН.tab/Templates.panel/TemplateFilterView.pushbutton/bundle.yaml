@@ -1,0 +1,8 @@
+title:
+  ru: ШаблонФильтрВид
+  en_us: Template Filter View
+tooltip:
+  ru: Копирование фильтров с настройками отображения из одного шаблона
+    вида в другой (цвет, прозрачность, толщина, скрыть/показать).
+  en_us: Copy view filters with graphic overrides from one view template
+    to another.

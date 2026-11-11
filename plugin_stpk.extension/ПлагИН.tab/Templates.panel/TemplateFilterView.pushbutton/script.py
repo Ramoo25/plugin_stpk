@@ -19,7 +19,7 @@ import re
 from pyrevit import revit, forms, script, DB
 
 # WPF-обёртки (Revit уже загрузил PresentationFramework)
-from System.Windows import Thickness, VerticalAlignment
+from System.Windows import Thickness, VerticalAlignment, Visibility
 from System.Windows.Controls import CheckBox, Orientation, StackPanel, TextBlock
 
 logger = script.get_logger()
@@ -118,6 +118,7 @@ class TemplateFilterForm(forms.WPFWindow):
 
         self.cb_source.SelectionChanged += self._on_template_changed
         self.cb_target.SelectionChanged += self._on_template_changed
+        self.tb_search.TextChanged += self._on_search_changed
         self.btn_all.Click += self._check_all
         self.btn_none.Click += self._uncheck_all
         self.btn_copy.Click += self._copy
@@ -177,7 +178,7 @@ class TemplateFilterForm(forms.WPFWindow):
             chk = CheckBox()
             chk.VerticalAlignment = VerticalAlignment.Center
             chk.Margin = Thickness(0, 0, 6, 0)
-            chk.IsChecked = True
+            chk.IsChecked = False
             chk.Checked += self._on_check_changed
             chk.Unchecked += self._on_check_changed
 
@@ -190,9 +191,25 @@ class TemplateFilterForm(forms.WPFWindow):
             row.Children.Add(lbl)
             self.pnl_filters.Children.Add(row)
 
-            self._rows.append((chk, filter_id, name, exists))
+            self._rows.append((row, chk, filter_id, name, exists))
 
+        self._apply_filter_visibility()
         self._refresh_copy_enabled()
+
+    def _on_search_changed(self, sender, args):
+        """Динамический фильтр списка фильтров по части имени."""
+        self._apply_filter_visibility()
+
+    def _apply_filter_visibility(self):
+        """Видимость строк: скрыть фильтры, не содержащие текст поиска."""
+        try:
+            query = unicode(self.tb_search.Text).strip().lower()
+        except Exception:
+            query = u""
+        for row, chk, filter_id, name, exists in self._rows:
+            visible = (query == u"" or query in name.lower())
+            row.Visibility = (Visibility.Visible if visible
+                              else Visibility.Collapsed)
 
     def _on_template_changed(self, sender, args):
         self._refresh_filter_list()
@@ -203,7 +220,7 @@ class TemplateFilterForm(forms.WPFWindow):
 
     def _checked_rows(self):
         return [(fid, name, exists)
-                for chk, fid, name, exists in self._rows
+                for row, chk, fid, name, exists in self._rows
                 if bool(chk.IsChecked)]
 
     def _refresh_copy_enabled(self):
@@ -217,11 +234,19 @@ class TemplateFilterForm(forms.WPFWindow):
 
     # ---------- операции ----------
     def _check_all(self, sender, args):
-        for chk, fid, name, exists in self._rows:
-            chk.IsChecked = True
+        """«Выделить»: отметить только фильтры, видимые после фильтрации."""
+        count = 0
+        for row, chk, fid, name, exists in self._rows:
+            if row.Visibility == Visibility.Visible and not bool(chk.IsChecked):
+                try:
+                    chk.IsChecked = True
+                    count += 1
+                except Exception:
+                    pass
+        self._set_status(u"Отмечено фильтров: {}".format(count))
 
     def _uncheck_all(self, sender, args):
-        for chk, fid, name, exists in self._rows:
+        for row, chk, fid, name, exists in self._rows:
             chk.IsChecked = False
 
     def _copy(self, sender, args):

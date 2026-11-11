@@ -19,29 +19,47 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
-      <TextBlock Grid.Row="0" Text="Копируем из (ШВ2):"/>
+      <TextBlock Grid.Row="0" Text="Копируем из шаблона вида:"/>
       <ComboBox Grid.Row="1" x:Name="cb_source" Height="24" Margin="0,4,0,10"/>
 
-      <TextBlock Grid.Row="2" Text="Копируем в (ШВ1):"/>
+      <TextBlock Grid.Row="2" Text="Копируем в шаблон вида:"/>
       <ComboBox Grid.Row="3" x:Name="cb_target" Height="24" Margin="0,4,0,10"/>
 
-      <StackPanel Grid.Row="4">
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+      <Grid Grid.Row="4" Margin="0,0,0,4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Содержит:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Grid.Column="1" x:Name="tb_search" Height="24"
+                 ToolTip="Фильтр списка фильтров по части имени; «Выделить» отмечает только видимые после фильтра"/>
+      </Grid>
+
+      <Grid Grid.Row="5">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
           <TextBlock Text="Фильтры источника" VerticalAlignment="Center"/>
-          <Button x:Name="btn_all" Content="Выделить всё" Width="90" Height="22"
-                  Margin="10,0,0,0"/>
+          <Button x:Name="btn_all" Content="Выделить" Width="90" Height="22"
+                  Margin="10,0,0,0"
+                  ToolTip="Отметить только фильтры, видимые после фильтрации"/>
           <Button x:Name="btn_none" Content="Снять всё" Width="90" Height="22"
                   Margin="6,0,0,0"/>
         </StackPanel>
-        <Border BorderBrush="#FFABADB3" BorderThickness="1">
+
+        <Border Grid.Row="1" BorderBrush="#FFABADB3" BorderThickness="1">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="pnl_filters" Margin="4"/>
           </ScrollViewer>
         </Border>
-      </StackPanel>
+      </Grid>
     </Grid>
 
     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"

@@ -249,7 +249,7 @@ Mode Extended, Ctrl/Shift) → «Разместить» кладёт по 1 эк
 | # | Этап | Результат |
 |---|------|-----------|
 | 0 | Ответы пользователя на открытые вопросы + фиксация ТЗ | ✅ 31.10 (см. §4) |
-| 1 | Каркас кнопки: `Params.panel\SheetParams.pushbutton` + bundle/ui/script | ✅ Создан 31.10 |
+| 1 | Каркас кнопки: `SheetsViews.panel\SheetParams.pushbutton` + bundle/ui/script | ✅ Создан 31.10 |
 | 2 | Окно «только чтение»: лист → поля + виды → поля | ✅ Проверено |
 | 3 | «Сохранить» (лист/вид) — транзакции, валидация, обновление кэша/UI | ✅ Проверено |
 | 4 | Пограничные случаи: ADSK-параметра нет, нет видов, дубли номеров, имена видов | 🔜 выборочные прогоны по желанию |
@@ -259,7 +259,7 @@ Mode Extended, Ctrl/Shift) → «Разместить» кладёт по 1 эк
 
 - Headless-прогон:
   ```powershell
-  pyrevit run "D:\Проекты ОВиК\python\plugin_stpk\plugin_stpk.extension\ПлагИН.tab\Params.panel\SheetParams.pushbutton\script.py" --revit=2022 --allowdialogs
+  pyrevit run "D:\Проекты ОВиК\python\plugin_stpk\plugin_stpk.extension\ПлагИН.tab\SheetsViews.panel\SheetParams.pushbutton\script.py" --revit=2022 --allowdialogs
   ```
 - Reload после изменений структуры/бандла; правка script.py — просто заново открыть окно.
 - Логи: Output pyRevit, `%APPDATA%\pyRevit\2022\*.log`.

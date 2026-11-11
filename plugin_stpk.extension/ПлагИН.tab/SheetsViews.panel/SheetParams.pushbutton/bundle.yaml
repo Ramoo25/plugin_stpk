@@ -1,6 +1,6 @@
 title:
-  ru: Параметры листов и видов
-  en_us: Sheet & View Parameters
+  ru: Имена
+  en_us: Sheet & View Names
 tooltip:
   ru: Просмотр и редактирование параметров листов (номер, имя, ADSK_Штамп титульный_Наименование документа) и размещённых видов (имя вида, заголовок на листе).
   en_us: View and edit sheet parameters (number, name, ADSK document title) and placed views (view name, title on sheet).

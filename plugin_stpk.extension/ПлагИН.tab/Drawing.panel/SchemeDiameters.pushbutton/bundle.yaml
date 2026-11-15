@@ -1,0 +1,9 @@
+title:
+  ru: СхемаДиаметров
+  en_us: Diameter Scheme
+tooltip:
+  ru: Рисование чертёжного вида со схемой диаметров труб до потребителей
+    (санузлы и другие помещения). Помещения берутся из связанной
+    архитектуры; конфигурация потребителей запоминается по проекту.
+  en_us: Create a drafting view showing pipe diameters to plumbing
+    fixtures per room (rooms from the linked architectural model).

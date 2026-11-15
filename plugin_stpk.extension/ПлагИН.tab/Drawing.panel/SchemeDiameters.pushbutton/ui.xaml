@@ -1,0 +1,115 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="СхемаДиаметров"
+        Width="900" Height="700"
+        MinWidth="820" MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="12">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="12"/>
+      <ColumnDefinition Width="230"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- ЛЕВАЯ КОЛОНКА: настройки вида, помещения, потребители -->
+    <Grid Grid.Column="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Grid Grid.Row="0" Margin="0,0,0,6">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Название вида:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox Grid.Column="1" x:Name="tb_view_name" Text="СД В1" Height="24"/>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,0,0,6">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Масштаб:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox Grid.Column="1" x:Name="tb_scale" Text="1:10" Height="24" Width="80"
+                 HorizontalContentAlignment="Left"
+                 ToolTip="Формат 1:N (нестандартный допустим, например 1:12)"/>
+      </Grid>
+
+      <GroupBox Grid.Row="2" Header="Основа" Padding="8,4,8,4" Margin="0,0,0,6">
+        <StackPanel Orientation="Horizontal">
+          <RadioButton x:Name="rb_base_node" Content="Узел ввода воды"
+                       GroupName="base" IsChecked="True" Margin="0,2,24,2"/>
+          <RadioButton x:Name="rb_base_coll" Content="Коллектор холодного водоснабжения"
+                       GroupName="base" Margin="0,2,0,2"/>
+        </StackPanel>
+      </GroupBox>
+
+      <TextBlock Grid.Row="3" Text="Помещения:" FontWeight="Bold" Margin="0,0,0,2"/>
+      <Border Grid.Row="4" BorderBrush="#FFABADB3" BorderThickness="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel x:Name="pnl_rooms" Margin="2"/>
+        </ScrollViewer>
+      </Border>
+
+      <TextBlock Grid.Row="5" Text="Потребители:" FontWeight="Bold" Margin="0,10,0,2"/>
+      <Border Grid.Row="6" BorderBrush="#FFABADB3" BorderThickness="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel x:Name="pnl_consumers" Margin="2"/>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- ПРАВАЯ КОЛОНКА: диаметр вводной, операции, отчёт -->
+    <Grid Grid.Column="2">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <GroupBox Grid.Row="0" Header="Диаметр вводной трубы:" Padding="8,4,8,4" Margin="0,0,0,10"
+                ToolTip="Диаметр трубы, входящей в выбранное помещение">
+        <StackPanel>
+          <RadioButton x:Name="rb_in16" Content="16 мм" GroupName="indiam"
+                       IsEnabled="False" Margin="0,2,0,2"/>
+          <RadioButton x:Name="rb_in20" Content="20 мм" GroupName="indiam"
+                       IsEnabled="False" Margin="0,2,0,2"/>
+        </StackPanel>
+      </GroupBox>
+
+      <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+        <Button x:Name="btn_add" Content="Добавить" Width="90" Height="26"
+                ToolTip="Добавить потребителя в выбранное помещение"/>
+        <Button x:Name="btn_remove" Content="Удалить" Width="90" Height="26" Margin="8,0,0,0"
+                ToolTip="Удалить отмеченного потребителя"/>
+      </StackPanel>
+
+      <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,6">
+        <Button x:Name="btn_up" Content="Вверх" Width="90" Height="26"
+                ToolTip="Переместить отмеченного потребителя вверх по списку"/>
+        <Button x:Name="btn_down" Content="Вниз" Width="90" Height="26" Margin="8,0,0,0"
+                ToolTip="Переместить отмеченного потребителя вниз по списку"/>
+      </StackPanel>
+
+      <TextBlock Grid.Row="3" x:Name="lbl_status" Text="" TextWrapping="Wrap"/>
+
+      <Button Grid.Row="4" x:Name="btn_draw" Content="Рисовать" Height="32" Margin="0,6,0,0"
+              ToolTip="Нарисовать схему во всех помещениях с потребителями (вид с тем же именем перезаписывается)"/>
+
+      <Button Grid.Row="5" x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
+              Margin="0,6,0,0" HorizontalAlignment="Right" IsCancel="True"/>
+    </Grid>
+  </Grid>
+</Window>

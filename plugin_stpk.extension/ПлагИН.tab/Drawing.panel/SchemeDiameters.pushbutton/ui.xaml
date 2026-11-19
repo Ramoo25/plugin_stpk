@@ -18,7 +18,6 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
@@ -44,24 +43,20 @@
                  ToolTip="Формат 1:N (нестандартный допустим, например 1:12)"/>
       </Grid>
 
-      <GroupBox Grid.Row="2" Header="Основа" Padding="8,4,8,4" Margin="0,0,0,6">
-        <StackPanel Orientation="Horizontal">
-          <RadioButton x:Name="rb_base_node" Content="Узел ввода воды"
-                       GroupName="base" IsChecked="True" Margin="0,2,24,2"/>
-          <RadioButton x:Name="rb_base_coll" Content="Коллектор холодного водоснабжения"
-                       GroupName="base" Margin="0,2,0,2"/>
-        </StackPanel>
-      </GroupBox>
-
-      <TextBlock Grid.Row="3" Text="Помещения:" FontWeight="Bold" Margin="0,0,0,2"/>
-      <Border Grid.Row="4" BorderBrush="#FFABADB3" BorderThickness="1">
+      <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,2">
+        <TextBlock Text="Помещения:" FontWeight="Bold" VerticalAlignment="Center"/>
+        <CheckBox x:Name="cb_hide_empty" Content="Скрывать без приборов"
+                  Margin="16,0,0,0" VerticalAlignment="Center"
+                  ToolTip="Показывать в списке только помещения, где добавлены приборы"/>
+      </StackPanel>
+      <Border Grid.Row="3" BorderBrush="#FFABADB3" BorderThickness="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="pnl_rooms" Margin="2"/>
         </ScrollViewer>
       </Border>
 
-      <TextBlock Grid.Row="5" Text="Потребители:" FontWeight="Bold" Margin="0,10,0,2"/>
-      <Border Grid.Row="6" BorderBrush="#FFABADB3" BorderThickness="1">
+      <TextBlock Grid.Row="4" Text="Потребители:" FontWeight="Bold" Margin="0,10,0,2"/>
+      <Border Grid.Row="5" BorderBrush="#FFABADB3" BorderThickness="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="pnl_consumers" Margin="2"/>
         </ScrollViewer>
@@ -75,6 +70,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>

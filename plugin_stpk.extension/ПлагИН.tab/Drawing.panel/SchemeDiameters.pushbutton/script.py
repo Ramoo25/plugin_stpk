@@ -32,10 +32,11 @@ from pyrevit import revit, forms, script, DB
 
 # WPF-обёртки (Revit уже загрузил PresentationFramework)
 from System.Windows import TextWrapping, Thickness
+from System.Windows.Input import Key, Keyboard
 from System.Windows.Media import Color, SolidColorBrush
 from System.Windows.Controls import (Border, ComboBox, Orientation,
                                      StackPanel, TextBlock,
-                                     TextChangedEventHandler)
+                                     TextChangedEventHandler, TextBox)
 from System.Windows.Controls.Primitives import TextBoxBase
 
 logger = script.get_logger()
@@ -81,9 +82,10 @@ FLOOR_MAP = {
 }
 
 TEXT_SMALL = u"ADSK_Основной текст_3.5"
+TEXT_BIG = u"ADSK_Основной текст_5"
+TITLE_TEXT = u"Схема диаметров холодной воды"
 
 # геометрия упрощённой текстовой схемы (мм чертёжного вида)
-ROW_PITCH = 60.0        # шаг строк (по вертикали)
 X_RIGHT_ROOM = 600.0    # правый край «текстпомещение» (выравнивание)
 GAP_ROOM_CONS = 60.0    # зазор «текстпомещение»/«текстприборы»
 X_LEFT_CONS = X_RIGHT_ROOM + GAP_ROOM_CONS  # левый край «текстприборы»
@@ -281,6 +283,8 @@ def missing_assets():
     missing = []
     if find_text_type_id(TEXT_SMALL) is None:
         missing.append(u"тип текста «{}»".format(TEXT_SMALL))
+    if find_text_type_id(TEXT_BIG) is None:
+        missing.append(u"тип текста «{}»".format(TEXT_BIG))
     if find_drafting_type_id() is None:
         missing.append(u"тип вида «Чертёжный»")
     return missing
@@ -463,6 +467,7 @@ class SchemeDiametersForm(forms.WPFWindow):
         self.btn_down.Click += self._move_down
         self.btn_draw.Click += self._draw
         self.btn_close.Click += self._close
+        self.PreviewKeyDown += self._on_preview_key
 
         self._build_room_list()
         self._set_status(u"")
@@ -747,6 +752,35 @@ class SchemeDiametersForm(forms.WPFWindow):
     def _move_down(self, sender, args):
         self._move(+1)
 
+    def _focus_in_editor(self):
+        """Фокус в поле ввода (TextBox / ComboBox) - стрелки и Del
+        работают штатно, не двигаем список."""
+        try:
+            el = Keyboard.FocusedElement
+            return isinstance(el, TextBox) or isinstance(el, ComboBox)
+        except Exception:
+            return False
+
+    def _on_preview_key(self, sender, args):
+        """Del - удалить отмеченного потребителя; стрелки Вверх/Вниз -
+        переместить его по списку (как одноимённые кнопки). Пока фокус
+        в текстовом поле, клавиши работают как обычно."""
+        try:
+            if self._focus_in_editor():
+                return
+            key = args.Key
+            if key == Key.Delete and self._c_selected is not None:
+                args.Handled = True
+                self._remove_consumer(sender, args)
+            elif key == Key.Up and self._c_selected is not None:
+                args.Handled = True
+                self._move(-1)
+            elif key == Key.Down and self._c_selected is not None:
+                args.Handled = True
+                self._move(+1)
+        except Exception as exc:
+            logger.debug("SchemeDiameters: клавиатура: %s", exc)
+
     def _close(self, sender, args):
         self.Close()
 
@@ -815,6 +849,7 @@ class SchemeDiametersForm(forms.WPFWindow):
 
         pipe_id = None  # линии в упрощённой схеме не рисуются
         small_id = find_text_type_id(TEXT_SMALL)
+        big_id = find_text_type_id(TEXT_BIG)
         drafting_type_id = find_drafting_type_id()
 
         warnings = []
@@ -861,11 +896,16 @@ class SchemeDiametersForm(forms.WPFWindow):
             n = len(drawing)
             total_consumers = 0
             h_text = text_height_mm(small_id)
+            # заголовок: над таблицей, тип «_5»; центр выставим после
+            # регенерации по фактическим габаритам таблицы
+            title_note = make_text(view, X_RIGHT_ROOM - 300,
+                                   h_text + 70, TITLE_TEXT, big_id)
             # записки без обёртки (обнимают текст); позицию правим
             # сдвигом по фактическим габаритам после регенерации
             shift_jobs = []  # (note, anchor_mm, "right"/"left")
             for i, (room, consumers, input_d) in enumerate(drawing):
-                y = -i * ROW_PITCH
+                # зазор между строками - 10 мм (19.11е)
+                y = -i * (h_text + 10.0)
                 total_consumers += len(consumers)
 
                 # «текстпомещение»: «Имя (этаж) ∅ввод», жирное;
@@ -906,6 +946,35 @@ class SchemeDiametersForm(forms.WPFWindow):
                 except Exception as exc:
                     logger.debug(
                         "SchemeDiameters: позиция записки: %s", exc)
+
+            # заголовок - по центру фактических габаритов таблицы
+            try:
+                bb_t = title_note.get_BoundingBox(view)
+                if bb_t is None:
+                    raise Exception(u"габариты заголовка недоступны")
+                left = None
+                right = None
+                for tn in DB.FilteredElementCollector(
+                        doc, view.Id).OfClass(DB.TextNote).ToElements():
+                    if tn.Id == title_note.Id:
+                        continue
+                    bb = tn.get_BoundingBox(view)
+                    if bb is None:
+                        continue
+                    left = (bb.Min.X if left is None
+                            else min(left, bb.Min.X))
+                    right = (bb.Max.X if right is None
+                             else max(right, bb.Max.X))
+                if left is not None and right > left:
+                    shift = ((left + right) / 2.0
+                             - (bb_t.Min.X + bb_t.Max.X) / 2.0)
+                    if abs(shift) > 0.1 * MM:
+                        DB.ElementTransformUtils.MoveElement(
+                            doc, title_note.Id, DB.XYZ(shift, 0.0, 0.0))
+            except Exception as exc:
+                logger.debug("SchemeDiameters: центр заголовка: %s", exc)
+                warnings.append(
+                    u"заголовок не отцентрован: {}".format(exc))
 
             # старые (переименованные) виды удаляются отдельным шагом
             # ПОСЛЕ транзакции отрисовки (см. ниже): сначала активным

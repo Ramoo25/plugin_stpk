@@ -31,10 +31,10 @@ import re
 from pyrevit import revit, forms, script, DB
 
 # WPF-обёртки (Revit уже загрузил PresentationFramework)
-from System.Windows import TextWrapping, Thickness
+from System.Windows import TextWrapping, Thickness, VerticalAlignment, Visibility
 from System.Windows.Input import Key, Keyboard
 from System.Windows.Media import Color, SolidColorBrush
-from System.Windows.Controls import (Border, ComboBox, Orientation,
+from System.Windows.Controls import (Border, CheckBox, ComboBox, Orientation,
                                      StackPanel, TextBlock,
                                      TextChangedEventHandler, TextBox)
 from System.Windows.Controls.Primitives import TextBoxBase
@@ -440,6 +440,21 @@ def bold_note(note):
         return False
 
 
+def underline_ranges(note, ranges):
+    """Подчеркнуть в записке диапазоны символов [(начало, конец)];
+    TextRange ждёт (начало, ДЛИНА) - переводим; True - получилось."""
+    try:
+        ft = note.GetFormattedText()
+        for start, end in ranges:
+            length = max(0, int(end) - int(start))
+            ft.SetUnderlineStatus(DB.TextRange(int(start), length), True)
+        note.SetFormattedText(ft)
+        return True
+    except Exception as exc:
+        logger.debug("SchemeDiameters: подчёркивание не удалось: %s", exc)
+        return False
+
+
 class SchemeDiametersForm(forms.WPFWindow):
     def __init__(self):
         forms.WPFWindow.__init__(self, "ui.xaml")
@@ -459,6 +474,8 @@ class SchemeDiametersForm(forms.WPFWindow):
 
         self.cb_hide_empty.Checked += self._on_hide_empty_changed
         self.cb_hide_empty.Unchecked += self._on_hide_empty_changed
+        self.rb_sys_tee.Checked += self._on_system_changed
+        self.rb_sys_col.Checked += self._on_system_changed
         self.rb_in16.Checked += self._on_input_diam_changed
         self.rb_in20.Checked += self._on_input_diam_changed
         self.btn_add.Click += self._add_consumer
@@ -468,6 +485,11 @@ class SchemeDiametersForm(forms.WPFWindow):
         self.btn_draw.Click += self._draw
         self.btn_close.Click += self._close
         self.PreviewKeyDown += self._on_preview_key
+
+        # восстановить режим «Система» из конфигурации проекта
+        if self._cfg.get(u"__system__") == u"col":
+            self.rb_sys_col.IsChecked = True
+        self._apply_system_mode()
 
         self._build_room_list()
         self._set_status(u"")
@@ -554,11 +576,24 @@ class SchemeDiametersForm(forms.WPFWindow):
         self._update_c2_area()
 
     def _room_cfg(self, key):
-        """Конфигурация помещения (без создания записи)."""
+        """Конфигурация помещения (без создания записи); потребители
+        нормализуются в словари {name, diam, nb}; старый формат
+        [имя, диаметр] мигрирует (каждый прибор - своя труба)."""
         item = self._cfg.get(key)
         if not isinstance(item, dict):
             return {"consumers": [], "input": DEFAULT_DIAM}
-        consumers = item.get("consumers") or []
+        consumers = []
+        for raw in (item.get("consumers") or []):
+            if isinstance(raw, dict):
+                consumers.append({
+                    u"name": raw.get(u"name") or u"",
+                    u"diam": 20 if raw.get(u"diam") == 20 else DEFAULT_DIAM,
+                    u"nb": bool(raw.get(u"nb", True))})
+            elif isinstance(raw, (list, tuple)) and len(raw) >= 2:
+                consumers.append({
+                    u"name": raw[0],
+                    u"diam": 20 if raw[1] == 20 else DEFAULT_DIAM,
+                    u"nb": True})
         input_d = item.get("input")
         if input_d not in (16, 20):
             input_d = DEFAULT_DIAM
@@ -588,17 +623,31 @@ class SchemeDiametersForm(forms.WPFWindow):
             return
         self._updating = True
         try:
-            for idx, (name, diam) in enumerate(consumers):
-                self._add_c2_row(idx, name, diam)
+            for idx, item in enumerate(consumers):
+                self._add_c2_row(idx, item[u"name"], item[u"diam"],
+                                 item[u"nb"])
         finally:
             self._updating = False
 
-    def _add_c2_row(self, idx, name, diam):
+    def _add_c2_row(self, idx, name, diam, nb=True):
         border = Border()
         border.Padding = Thickness(4, 2, 4, 2)
         border.Background = BG_PLAIN
         row = StackPanel()
         row.Orientation = Orientation.Horizontal
+
+        nb_box = None
+        if self._collector_mode():
+            # флажок «с новой трубы»: прибор начинает свою трубу;
+            # снятая галочка - прибор висит на предыдущей трубе
+            nb_box = CheckBox()
+            nb_box.Content = u"с новой трубы"
+            nb_box.VerticalAlignment = VerticalAlignment.Center
+            nb_box.Margin = Thickness(0, 0, 6, 0)
+            nb_box.IsChecked = nb
+            if idx == 0:
+                nb_box.IsChecked = True  # первый прибор - всегда новая
+                nb_box.IsEnabled = False
 
         name_box = ComboBox()
         name_box.IsEditable = True
@@ -613,12 +662,14 @@ class SchemeDiametersForm(forms.WPFWindow):
         diam_box.ItemsSource = [u"16 мм", u"20 мм"]
         diam_box.SelectedIndex = 1 if diam == 20 else 0
 
+        if nb_box is not None:
+            row.Children.Add(nb_box)
         row.Children.Add(name_box)
         row.Children.Add(diam_box)
         border.Child = row
         self.pnl_consumers.Children.Add(border)
-        self._c_rows.append({"border": border,
-                             "name": name_box, "diam": diam_box})
+        self._c_rows.append({"border": border, "name": name_box,
+                             "diam": diam_box, "nb": nb_box})
 
         # у ComboBox нет TextChanged - ловим всплывающее событие
         # TextChanged внутреннего текстового поля (редактируемый режим);
@@ -628,6 +679,9 @@ class SchemeDiametersForm(forms.WPFWindow):
             TextChangedEventHandler(self._on_consumer_changed))
         name_box.SelectionChanged += self._on_consumer_changed
         diam_box.SelectionChanged += self._on_consumer_changed
+        if nb_box is not None:
+            nb_box.Checked += self._on_consumer_changed
+            nb_box.Unchecked += self._on_consumer_changed
         border.MouseLeftButtonUp += (
             lambda s, e, i=idx: self._select_c_row(i))
 
@@ -643,7 +697,8 @@ class SchemeDiametersForm(forms.WPFWindow):
         self._sync_from_c2()
 
     def _sync_from_c2(self):
-        """Строки С2 -> конфигурация помещения (+правило вводного φ)."""
+        """Строки С2 -> конфигурация помещения; правило вводного φ
+        действует только в тройниковой системе."""
         key = self._selected_key
         if key is None:
             return
@@ -654,23 +709,34 @@ class SchemeDiametersForm(forms.WPFWindow):
             except Exception:
                 nm = u""
             dm = 20 if row["diam"].SelectedIndex == 1 else 16
-            consumers.append([nm, dm])
+            nb = bool(row["nb"].IsChecked) if row["nb"] is not None else True
+            consumers.append({u"name": nm, u"diam": dm, u"nb": nb})
+        if consumers:
+            consumers[0][u"nb"] = True  # первый прибор - всегда новая труба
         item = self._cfg.setdefault(key, {})
         item["consumers"] = consumers
-        if any(d == 20 for nm, d in consumers):
-            item["input"] = 20  # авто-переключение вводной на 20
-        elif item.get("input") not in (16, 20):
-            item["input"] = DEFAULT_DIAM
+        if not self._collector_mode():
+            if any(c[u"diam"] == 20 for c in consumers):
+                item["input"] = 20  # авто-переключение вводной на 20
+            elif item.get("input") not in (16, 20):
+                item["input"] = DEFAULT_DIAM
         save_config(self._cfg)
         self._update_room_row_colors()
         self._apply_diam_lock()
 
     def _apply_diam_lock(self):
-        """Радио «Диаметр вводной трубы» - по выбранному помещению;
-        есть потребитель 20 мм -> 16 заблокировано."""
+        """Радио «Диаметр вводной трубы» - по выбранному помещению
+        (только тройниковая система); есть потребитель 20 мм ->
+        16 заблокировано. В коллекторной системе блок скрыт."""
         key = self._selected_key
         self._updating = True
         try:
+            if self._collector_mode():
+                self.rb_in16.IsEnabled = False
+                self.rb_in20.IsEnabled = False
+                self.rb_in16.IsChecked = False
+                self.rb_in20.IsChecked = False
+                return
             if key is None:
                 self.rb_in16.IsEnabled = False
                 self.rb_in20.IsEnabled = False
@@ -690,6 +756,30 @@ class SchemeDiametersForm(forms.WPFWindow):
             self._updating = False
 
     # ---------- радио ----------
+    def _collector_mode(self):
+        """True - коллекторная система (радио «Система»)."""
+        try:
+            return bool(self.rb_sys_col.IsChecked)
+        except Exception:
+            return False
+
+    def _on_system_changed(self, sender, args):
+        if self._updating:
+            return
+        self._cfg[u"__system__"] = (
+            u"col" if self._collector_mode() else u"tee")
+        save_config(self._cfg)
+        self._apply_system_mode()
+
+    def _apply_system_mode(self):
+        """Режим «Система»: блок вводного диаметра гаснет в коллекторной
+        системе; список С2 перестраивается (появляются флажки
+        «с новой трубы»)."""
+        collector = self._collector_mode()
+        self.gb_input.Visibility = (Visibility.Collapsed if collector
+                                    else Visibility.Visible)
+        self._update_c2_area()
+
     def _on_input_diam_changed(self, sender, args):
         if self._updating:
             return
@@ -713,7 +803,8 @@ class SchemeDiametersForm(forms.WPFWindow):
             return
         item = self._cfg.setdefault(key, {})
         consumers = item.setdefault("consumers", [])
-        consumers.append([DEFAULT_CONSUMER, DEFAULT_DIAM])
+        consumers.append({u"name": DEFAULT_CONSUMER,
+                          u"diam": DEFAULT_DIAM, u"nb": True})
         save_config(self._cfg)
         self._update_room_row_colors()
         self._rebuild_c2(select_index=len(consumers) - 1)
@@ -726,6 +817,8 @@ class SchemeDiametersForm(forms.WPFWindow):
         consumers = self._room_cfg(key)["consumers"]
         if 0 <= self._c_selected < len(consumers):
             del consumers[self._c_selected]
+            if consumers:
+                consumers[0][u"nb"] = True
             self._cfg.setdefault(key, {})["consumers"] = consumers
             save_config(self._cfg)
             self._update_room_row_colors()
@@ -742,6 +835,8 @@ class SchemeDiametersForm(forms.WPFWindow):
         if not (0 <= j < len(consumers)):
             return
         consumers[i], consumers[j] = consumers[j], consumers[i]
+        if consumers:
+            consumers[0][u"nb"] = True
         self._cfg.setdefault(key, {})["consumers"] = consumers
         save_config(self._cfg)
         self._rebuild_c2(select_index=j)
@@ -805,16 +900,55 @@ class SchemeDiametersForm(forms.WPFWindow):
                 warn_icon=True)
             return
 
+        collector = self._collector_mode()
         drawing = []
+        total_consumers = 0
         for room in self._rooms:
             cfg = self._room_cfg(room_key(room))
             consumers = []
-            for nm, d in cfg["consumers"]:
-                nm = unicode(nm or u"").strip()
+            for item in cfg["consumers"]:
+                nm = unicode(item.get(u"name") or u"").strip()
                 if nm:
-                    consumers.append((nm, int(d)))
-            if consumers:
-                drawing.append((room, consumers, cfg["input"]))
+                    consumers.append((nm, int(item.get(u"diam") or 16),
+                                      bool(item.get(u"nb", True))))
+            if not consumers:
+                continue
+            # группы приборов на одной трубе: nb=True начинает новую;
+            # внутри группы (2+ приборов) в коллекторной системе
+            # подчёркиваем - видно исключения
+            groups = []
+            for item in consumers:
+                if not groups or item[2]:
+                    groups.append([])
+                groups[-1].append(item)
+            parts = []
+            ranges = []  # (начало, конец) приборов на общей трубе
+            for gi, group in enumerate(groups):
+                if gi > 0:
+                    parts.append(u"; ")
+                for ii, (nm, d, nb) in enumerate(group):
+                    if ii > 0:
+                        # разделитель внутри общей трубы подчёркиваем
+                        # вместе с приборами
+                        sep_start = sum(len(p) for p in parts)
+                        sep = u"  -  "
+                        parts.append(sep)
+                        if len(group) > 1:
+                            ranges.append((sep_start,
+                                           sep_start + len(sep)))
+                    start = sum(len(p) for p in parts)
+                    text = u"{} ∅{}".format(nm, d)
+                    parts.append(text)
+                    if len(group) > 1:
+                        ranges.append((start, start + len(text)))
+            cons_str = u"".join(parts)
+            # «текстпомещение»: в коллекторной системе без диаметра -
+            # каждый прибор несёт свой ∅
+            room_text = (room_short(room) if collector
+                         else u"{} ∅{}".format(room_short(room),
+                                               cfg["input"]))
+            total_consumers += len(consumers)
+            drawing.append((room_text, cons_str, ranges))
         if not drawing:
             forms.alert(
                 u"Нет ни одного помещения с потребителями.",
@@ -894,7 +1028,6 @@ class SchemeDiametersForm(forms.WPFWindow):
                     p.Set(val)
 
             n = len(drawing)
-            total_consumers = 0
             h_text = text_height_mm(small_id)
             # заголовок: над таблицей, тип «_5»; центр выставим после
             # регенерации по фактическим габаритам таблицы
@@ -903,28 +1036,28 @@ class SchemeDiametersForm(forms.WPFWindow):
             # записки без обёртки (обнимают текст); позицию правим
             # сдвигом по фактическим габаритам после регенерации
             shift_jobs = []  # (note, anchor_mm, "right"/"left")
-            for i, (room, consumers, input_d) in enumerate(drawing):
+            for i, (room_text, cons_str, ranges) in enumerate(drawing):
                 # зазор между строками - 10 мм (19.11е)
                 y = -i * (h_text + 10.0)
-                total_consumers += len(consumers)
 
-                # «текстпомещение»: «Имя (этаж) ∅ввод», жирное;
-                # правый край - на X_RIGHT_ROOM
+                # «текстпомещение» (в коллекторной системе - без ∅,
+                # каждый прибор несёт свой): правый край - X_RIGHT_ROOM
                 room_note = make_text(
-                    view, X_RIGHT_ROOM - 400, y,
-                    u"{} ∅{}".format(room_short(room), input_d), small_id)
+                    view, X_RIGHT_ROOM - 400, y, room_text, small_id)
                 shift_jobs.append((room_note, X_RIGHT_ROOM, u"right"))
                 if not bold_note(room_note):
-                    warnings.append(u"«{}» без жирного начертания".format(
-                        room_short(room)))
+                    warnings.append(
+                        u"«{}» без жирного начертания".format(room_text))
 
-                # «текстприборы»: «Прибор ∅16  -  Прибор ∅16  -  …»;
-                # левый край - на X_LEFT_CONS (зазор одинаковый)
-                cons_str = u"  -  ".join(
-                    u"{} ∅{}".format(nm, d) for nm, d in consumers)
+                # «текстприборы»: левый край - на X_LEFT_CONS (зазор
+                # одинаковый)
                 cons_note = make_text(view, X_LEFT_CONS, y,
                                       cons_str, small_id)
                 shift_jobs.append((cons_note, X_LEFT_CONS, u"left"))
+                if ranges and not underline_ranges(cons_note, ranges):
+                    warnings.append(u"приборы на общей трубе без "
+                                    u"подчёркивания (строка «{}»)".format(
+                                        room_text))
 
             # одна регенерация, затем выставление краёв записок
             try:

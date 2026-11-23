@@ -12,9 +12,10 @@
       <ColumnDefinition Width="230"/>
     </Grid.ColumnDefinitions>
 
-    <!-- ЛЕВАЯ КОЛОНКА: настройки вида, помещения, потребители -->
+    <!-- ЛЕВАЯ КОЛОНКА: настройки вида, система, помещения, потребители -->
     <Grid Grid.Column="0">
       <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -43,20 +44,32 @@
                  ToolTip="Формат 1:N (нестандартный допустим, например 1:12)"/>
       </Grid>
 
-      <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,2">
+      <GroupBox Grid.Row="2" Header="Система" Padding="8,4,8,4" Margin="0,0,0,6"
+                ToolTip="Тройниковая: в помещение заходит одна труба, раздаёт
+воду ответвлениями. Коллекторная: от коллектора/узла ввода на каждый
+прибор идёт своя труба (исключения - приборы на одной трубе).">
+        <StackPanel Orientation="Horizontal">
+          <RadioButton x:Name="rb_sys_tee" Content="Тройниковая система"
+                       GroupName="sys" IsChecked="True" Margin="0,2,24,2"/>
+          <RadioButton x:Name="rb_sys_col" Content="Коллекторная система"
+                       GroupName="sys" Margin="0,2,0,2"/>
+        </StackPanel>
+      </GroupBox>
+
+      <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,2">
         <TextBlock Text="Помещения:" FontWeight="Bold" VerticalAlignment="Center"/>
         <CheckBox x:Name="cb_hide_empty" Content="Скрывать без приборов"
                   Margin="16,0,0,0" VerticalAlignment="Center"
                   ToolTip="Показывать в списке только помещения, где добавлены приборы"/>
       </StackPanel>
-      <Border Grid.Row="3" BorderBrush="#FFABADB3" BorderThickness="1">
+      <Border Grid.Row="4" BorderBrush="#FFABADB3" BorderThickness="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="pnl_rooms" Margin="2"/>
         </ScrollViewer>
       </Border>
 
-      <TextBlock Grid.Row="4" Text="Потребители:" FontWeight="Bold" Margin="0,10,0,2"/>
-      <Border Grid.Row="5" BorderBrush="#FFABADB3" BorderThickness="1">
+      <TextBlock Grid.Row="5" Text="Потребители:" FontWeight="Bold" Margin="0,10,0,2"/>
+      <Border Grid.Row="6" BorderBrush="#FFABADB3" BorderThickness="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="pnl_consumers" Margin="2"/>
         </ScrollViewer>
@@ -75,8 +88,8 @@
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <GroupBox Grid.Row="0" Header="Диаметр вводной трубы:" Padding="8,4,8,4" Margin="0,0,0,10"
-                ToolTip="Диаметр трубы, входящей в выбранное помещение">
+      <GroupBox Grid.Row="0" x:Name="gb_input" Header="Диаметр вводной трубы:" Padding="8,4,8,4" Margin="0,0,0,10"
+                ToolTip="Диаметр трубы, входящей в выбранное помещение (тройниковая система)">
         <StackPanel>
           <RadioButton x:Name="rb_in16" Content="16 мм" GroupName="indiam"
                        IsEnabled="False" Margin="0,2,0,2"/>

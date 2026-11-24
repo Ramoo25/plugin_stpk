@@ -84,6 +84,7 @@ FLOOR_MAP = {
 TEXT_SMALL = u"ADSK_Основной текст_3.5"
 TEXT_BIG = u"ADSK_Основной текст_5"
 TITLE_TEXT = u"Схема диаметров холодной воды"
+VIEWPORT_TYPE = u"Без названия"
 
 # геометрия упрощённой текстовой схемы (мм чертёжного вида)
 X_RIGHT_ROOM = 600.0    # правый край «текстпомещение» (выравнивание)
@@ -335,6 +336,83 @@ def views_with_name(name):
     return count
 
 
+def collect_viewports(names):
+    """Размещения видов на листах: [(sheet_id, XYZ-центр)] для видов
+    с именами из names (Viewport знает лист и точку на листе)."""
+    targets = set((n or u"").strip() for n in names)
+    out = []
+    try:
+        for vp in DB.FilteredElementCollector(doc).OfClass(
+                DB.Viewport).ToElements():
+            try:
+                v = doc.GetElement(vp.ViewId)
+                nm = element_name_safe(v, (DB.BuiltInParameter.VIEW_NAME,))
+                if nm.strip() in targets:
+                    # BoxCenter - метод GetBoxCenter(), свойства нет
+                    out.append((vp.SheetId, vp.GetBoxCenter()))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
+def viewport_type_list(viewport):
+    """Типоразмеры вида «Видовой экран»: [(id, имя)].
+    Стратегии по очереди:
+    1) класс ViewportType, если он есть в API этой версии;
+    2) ElementType с тем же FamilyName, что у типа вьюпорта
+       (имя семейства берём у самого типа - без хардкода)."""
+    out = []
+    # 1) прямой класс ViewportType (в части версий API есть)
+    try:
+        vt = getattr(DB, "ViewportType", None)
+        if vt is not None:
+            for t in DB.FilteredElementCollector(doc).OfClass(
+                    vt).ToElements():
+                nm = element_name_safe(
+                    t, (DB.BuiltInParameter.ALL_MODEL_TYPE_NAME,))
+                if nm.strip():
+                    out.append((t.Id, nm.strip()))
+    except Exception as exc:
+        logger.debug("SchemeDiameters: ViewportType: %s", exc)
+    if out:
+        return out
+    # 2) ElementType с тем же FamilyName
+    try:
+        cur = doc.GetElement(viewport.GetTypeId())
+        fam = cur.FamilyName
+        for t in DB.FilteredElementCollector(doc).OfClass(
+                DB.ElementType).ToElements():
+            try:
+                if t.FamilyName == fam:
+                    nm = element_name_safe(
+                        t, (DB.BuiltInParameter.ALL_MODEL_TYPE_NAME,))
+                    if nm.strip():
+                        out.append((t.Id, nm.strip()))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.debug("SchemeDiameters: FamilyName: %s", exc)
+    return out
+
+
+def replace_on_sheets(view, placements):
+    """Разместить вид на листах в сохранённых точках; вернуть
+    (число успешных, [созданные вьюпорты])."""
+    placed = 0
+    created = []
+    for sheet_id, center in placements:
+        try:
+            vp = DB.Viewport.Create(doc, sheet_id, view.Id, center)
+            if vp is not None:
+                created.append(vp)
+                placed += 1
+        except Exception as exc:
+            logger.debug("SchemeDiameters: возврат на лист: %s", exc)
+    return placed, created
+
+
 def stale_view_names(prefix):
     """Имена видов-«хвостов» прошлых запусков: начинаются с
     «prefix_СТАРАЯ» (например, «СД В1_СТАРАЯ», «СД В1_СТАРАЯ2»)."""
@@ -471,6 +549,20 @@ class SchemeDiametersForm(forms.WPFWindow):
         self._selected_key = None       # выбранное помещение (ключ)
         self._c_selected = None         # отмеченный потребитель (индекс)
         self._hide_empty = False        # чекбокс «Скрывать без приборов»
+        # имя вида - своё на проект; восстанавливаем до подписки на
+        # TextChanged, чтобы восстановление не сохранило само себя
+        saved_name = unicode(self._cfg.get(u"__view_name__") or u"").strip()
+        self.tb_view_name.Text = saved_name or u"СД В1"
+        self.tb_view_name.TextChanged += self._on_view_name_changed
+        # подписи помещений на виде: номер пом. / этаж (скобки)
+        self._lbl_num = bool(self._cfg.get(u"__lbl_num__", True))
+        self._lbl_floor = bool(self._cfg.get(u"__lbl_floor__", True))
+        self.cb_lbl_num.IsChecked = self._lbl_num
+        self.cb_lbl_floor.IsChecked = self._lbl_floor
+        self.cb_lbl_num.Checked += self._on_lbl_changed
+        self.cb_lbl_num.Unchecked += self._on_lbl_changed
+        self.cb_lbl_floor.Checked += self._on_lbl_changed
+        self.cb_lbl_floor.Unchecked += self._on_lbl_changed
 
         self.cb_hide_empty.Checked += self._on_hide_empty_changed
         self.cb_hide_empty.Unchecked += self._on_hide_empty_changed
@@ -756,6 +848,35 @@ class SchemeDiametersForm(forms.WPFWindow):
             self._updating = False
 
     # ---------- радио ----------
+    def _on_view_name_changed(self, sender, args):
+        """Имя чертёжного вида - запоминаем по проекту."""
+        self._cfg[u"__view_name__"] = unicode(
+            self.tb_view_name.Text or u"").strip()
+        save_config(self._cfg)
+
+    def _on_lbl_changed(self, sender, args):
+        """Флажки подписи помещения на виде (номер пом. / этаж)."""
+        try:
+            self._lbl_num = bool(self.cb_lbl_num.IsChecked)
+            self._lbl_floor = bool(self.cb_lbl_floor.IsChecked)
+        except Exception:
+            pass
+        self._cfg[u"__lbl_num__"] = self._lbl_num
+        self._cfg[u"__lbl_floor__"] = self._lbl_floor
+        save_config(self._cfg)
+
+    def _room_display(self, room):
+        """Подпись помещения на виде по флажкам: «СУ1»,
+        «СУ1 (1 эт.)», «СУ1 (1 эт., пом. 8)», «СУ1 (пом. 8)»."""
+        parts = []
+        if self._lbl_floor and room["floor"]:
+            parts.append(room["floor"])
+        if self._lbl_num and room["number"]:
+            parts.append(u"пом. {}".format(room["number"]))
+        if parts:
+            return u"{} ({})".format(room["name"], u", ".join(parts))
+        return room["name"]
+
     def _collector_mode(self):
         """True - коллекторная система (радио «Система»)."""
         try:
@@ -944,8 +1065,8 @@ class SchemeDiametersForm(forms.WPFWindow):
             cons_str = u"".join(parts)
             # «текстпомещение»: в коллекторной системе без диаметра -
             # каждый прибор несёт свой ∅
-            room_text = (room_short(room) if collector
-                         else u"{} ∅{}".format(room_short(room),
+            room_text = (self._room_display(room) if collector
+                         else u"{} ∅{}".format(self._room_display(room),
                                                cfg["input"]))
             total_consumers += len(consumers)
             drawing.append((room_text, cons_str, ranges))
@@ -987,6 +1108,9 @@ class SchemeDiametersForm(forms.WPFWindow):
         drafting_type_id = find_drafting_type_id()
 
         warnings = []
+        # размещения старого вида на листах - запоминаем ДО перезаписи
+        # (Viewport знает лист и точку, где лежал вид)
+        placements = collect_viewports([view_name])
 
         # перезапись: старый вид переименовывается в «<имя>_СТАРАЯ» -
         # имя освобождается даже если вид открыт в Revit (удаление
@@ -1155,9 +1279,71 @@ class SchemeDiametersForm(forms.WPFWindow):
                             u"Удалите вручную.".format(old, err or u"причина "
                                                         u"неизвестна"))
 
+        # возврат нового вида на листы, где лежал старый (те же точки);
+        # типоразмер вьюпорта - «Без названия» (категорию берём у самого
+        # вьюпорта: угадывание категорий не нужно)
+        placed = 0
+        if placements:
+            missing_type_names = None
+            with revit.Transaction(u"ПлагИН: возврат вида на листы", doc):
+                placed, created_vps = replace_on_sheets(view, placements)
+                if created_vps:
+                    try:
+                        types = viewport_type_list(created_vps[0])
+                        type_id = None
+                        for tid, nm in types:
+                            if nm == VIEWPORT_TYPE:
+                                type_id = tid
+                                break
+                        if type_id is not None:
+                            for vp in created_vps:
+                                try:
+                                    vp.ChangeTypeId(type_id)
+                                except Exception as exc:
+                                    warnings.append(
+                                        u"тип вьюпорта не изменён: {}".format(
+                                            exc))
+                        elif types:
+                            warnings.append(
+                                u"«{}» нет среди {} типоразмеров "
+                                u"семейства".format(VIEWPORT_TYPE,
+                                                    len(types)))
+                            missing_type_names = sorted(
+                                nm for _, nm in types)
+                        else:
+                            warnings.append(
+                                u"типоразмеры семейства вьюпорта не "
+                                u"читаются (0 шт. по обеим стратегиям)")
+                    except Exception as exc:
+                        warnings.append(
+                            u"типоразмеры семейства не прочитаны: {}".format(
+                                exc))
+            if missing_type_names is not None:
+                if missing_type_names:
+                    body = u"\n".join(u"- " + nm
+                                      for nm in missing_type_names[:25])
+                    if len(missing_type_names) > 25:
+                        body += u"\n- ... и ещё {}".format(
+                            len(missing_type_names) - 25)
+                else:
+                    body = u"(не найдено)"
+                forms.alert(
+                    u"Типоразмер вьюпорта «{}» не найден.\nВьюпорт будет "
+                    u"с подписью.\n\nТипоразмеры вьюпортов в проекте:\n"
+                    u"{}".format(VIEWPORT_TYPE, body),
+                    title="Типоразмер вьюпорта",
+                    warn_icon=True)
+            if placed < len(placements):
+                warnings.append(
+                    u"на листы возвращено {} из {} размещений".format(
+                        placed, len(placements)))
+
         lines = [u"Создан вид «{}» ({}):".format(view_name, scale_n),
                  u"помещений {}, потребителей {}".format(
                      n, total_consumers)]
+        if placements:
+            lines.append(u"возвращён на листы: {} из {}".format(
+                placed, len(placements)))
         if warnings:
             lines.append(u"Замечания:")
             lines.extend(u"- " + w for w in warnings)

@@ -86,6 +86,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <GroupBox Grid.Row="0" x:Name="gb_input" Header="Диаметр вводной трубы:" Padding="8,4,8,4" Margin="0,0,0,10"
@@ -114,10 +115,17 @@
 
       <TextBlock Grid.Row="3" x:Name="lbl_status" Text="" TextWrapping="Wrap"/>
 
-      <Button Grid.Row="4" x:Name="btn_draw" Content="Рисовать" Height="32" Margin="0,6,0,0"
+      <StackPanel Grid.Row="4" Margin="0,4,0,0">
+        <CheckBox x:Name="cb_lbl_num" Content="Номер помещения"
+                  ToolTip="Добавить в скобках номер помещения: СУ1 (пом. 8)"/>
+        <CheckBox x:Name="cb_lbl_floor" Content="Обозначение этажа" Margin="0,2,0,0"
+                  ToolTip="Добавить в скобках этаж: СУ1 (1 эт.); оба флажка: СУ1 (1 эт., пом. 8)"/>
+      </StackPanel>
+
+      <Button Grid.Row="5" x:Name="btn_draw" Content="Рисовать" Height="32" Margin="0,6,0,0"
               ToolTip="Нарисовать схему во всех помещениях с потребителями (вид с тем же именем перезаписывается)"/>
 
-      <Button Grid.Row="5" x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
+      <Button Grid.Row="6" x:Name="btn_close" Content="Закрыть" Width="110" Height="26"
               Margin="0,6,0,0" HorizontalAlignment="Right" IsCancel="True"/>
     </Grid>
   </Grid>

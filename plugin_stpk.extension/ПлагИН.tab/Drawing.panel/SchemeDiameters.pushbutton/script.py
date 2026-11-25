@@ -81,10 +81,36 @@ FLOOR_MAP = {
     u"ГП3": u"3 эт.",
 }
 
-TEXT_SMALL = u"ADSK_Основной текст_3.5"
-TEXT_BIG = u"ADSK_Основной текст_5"
-TITLE_TEXT = u"Схема диаметров холодной воды"
+TEXT_SMALL = u"ADSK_Основной текст_2.5"   # основной текст таблицы
+TITLE_TYPE = u"ADSK_Основной текст_3.5"   # заголовок/подзаголовок
+GAP_COLS_BASE = 60.0   # зазор помещения/приборы при масштабе 1:10
+                       # (пропорционально масштабу вида)
+ROW_GAP_MM = 0.0   # зазор между строками таблицы (мм на виде)
+TITLE_GAP_XV = 40.0   # зазор заголовок/первая строка, ХВ (при 1:10)
+TITLE_GAP_HW = 100.0  # зазор заголовок/первая строка, ГВ (при 1:10)
+TITLE_TEXT = u"Диаметры трубопроводов холодного водоснабжения"
+TITLE_TEXT_HW = u"Диаметры трубопроводов горячего водоснабжения"
+TITLE_HW_SUB = u"(в скобках наличие/отсутствие линии рециркуляции)"
 VIEWPORT_TYPE = u"Без названия"
+
+# циркуляция ГВ
+CIRC_NONE = u"Нет"
+CIRC_YES = u"Да"
+CIRC_PS = u"ПС"
+CIRC_CHOICES = [CIRC_NONE, CIRC_YES, CIRC_PS]
+TEE_CIRC_NONE = u"Нет циркуляции ГВ"
+TEE_CIRC_PS = u"Полотенцесушитель"
+TEE_CIRC_YES = u"Циркуляция ГВ"
+TEE_CIRC_CHOICES = [TEE_CIRC_NONE, TEE_CIRC_PS, TEE_CIRC_YES]
+HW_TAIL_RECIRC = u"Рециркуляция ∅16"  # диаметр рециркуляции - всегда 16
+# приборы без горячей воды: в вид ГВ не попадают
+NO_HW_CONSUMERS = [
+    u"Унитаз",
+    u"Робот пылесос",
+    u"Обливное устройство",
+    u"Посудомоечная машина",
+    u"Стиральная машина",
+]
 
 # геометрия упрощённой текстовой схемы (мм чертёжного вида)
 X_RIGHT_ROOM = 600.0    # правый край «текстпомещение» (выравнивание)
@@ -284,8 +310,8 @@ def missing_assets():
     missing = []
     if find_text_type_id(TEXT_SMALL) is None:
         missing.append(u"тип текста «{}»".format(TEXT_SMALL))
-    if find_text_type_id(TEXT_BIG) is None:
-        missing.append(u"тип текста «{}»".format(TEXT_BIG))
+    if find_text_type_id(TITLE_TYPE) is None:
+        missing.append(u"тип текста «{}»".format(TITLE_TYPE))
     if find_drafting_type_id() is None:
         missing.append(u"тип вида «Чертёжный»")
     return missing
@@ -554,6 +580,9 @@ class SchemeDiametersForm(forms.WPFWindow):
         saved_name = unicode(self._cfg.get(u"__view_name__") or u"").strip()
         self.tb_view_name.Text = saved_name or u"СД В1"
         self.tb_view_name.TextChanged += self._on_view_name_changed
+        saved_hw = unicode(self._cfg.get(u"__view_hw__") or u"").strip()
+        self.tb_view_hw.Text = saved_hw or u"СД ГВ"
+        self.tb_view_hw.TextChanged += self._on_view_hw_changed
         # подписи помещений на виде: номер пом. / этаж (скобки)
         self._lbl_num = bool(self._cfg.get(u"__lbl_num__", True))
         self._lbl_floor = bool(self._cfg.get(u"__lbl_floor__", True))
@@ -677,19 +706,26 @@ class SchemeDiametersForm(forms.WPFWindow):
         consumers = []
         for raw in (item.get("consumers") or []):
             if isinstance(raw, dict):
+                circ = raw.get(u"circ")
                 consumers.append({
                     u"name": raw.get(u"name") or u"",
                     u"diam": 20 if raw.get(u"diam") == 20 else DEFAULT_DIAM,
-                    u"nb": bool(raw.get(u"nb", True))})
+                    u"nb": bool(raw.get(u"nb", True)),
+                    u"circ": circ if circ in CIRC_CHOICES else CIRC_NONE})
             elif isinstance(raw, (list, tuple)) and len(raw) >= 2:
                 consumers.append({
                     u"name": raw[0],
                     u"diam": 20 if raw[1] == 20 else DEFAULT_DIAM,
-                    u"nb": True})
+                    u"nb": True,
+                    u"circ": CIRC_NONE})
+        circ_tee = item.get(u"circ_tee")
+        if circ_tee not in (TEE_CIRC_NONE, TEE_CIRC_PS, TEE_CIRC_YES):
+            circ_tee = TEE_CIRC_NONE
         input_d = item.get("input")
         if input_d not in (16, 20):
             input_d = DEFAULT_DIAM
-        return {"consumers": consumers, "input": input_d}
+        return {"consumers": consumers, "input": input_d,
+                "circ_tee": circ_tee}
 
     # ---------- С2: потребители ----------
     def _update_c2_area(self):
@@ -717,11 +753,16 @@ class SchemeDiametersForm(forms.WPFWindow):
         try:
             for idx, item in enumerate(consumers):
                 self._add_c2_row(idx, item[u"name"], item[u"diam"],
-                                 item[u"nb"])
+                                 item[u"nb"], item[u"circ"])
         finally:
             self._updating = False
+        # в тройниковой системе - строка циркуляции ГВ в конце списка
+        # (у каждого помещения с приборами)
+        if not self._collector_mode() and consumers:
+            self._add_circ_tee_row(self._room_cfg(
+                self._selected_key)[u"circ_tee"])
 
-    def _add_c2_row(self, idx, name, diam, nb=True):
+    def _add_c2_row(self, idx, name, diam, nb=True, circ=CIRC_NONE):
         border = Border()
         border.Padding = Thickness(4, 2, 4, 2)
         border.Background = BG_PLAIN
@@ -729,6 +770,7 @@ class SchemeDiametersForm(forms.WPFWindow):
         row.Orientation = Orientation.Horizontal
 
         nb_box = None
+        has_hw = name not in NO_HW_CONSUMERS
         if self._collector_mode():
             # флажок «с новой трубы»: прибор начинает свою трубу;
             # снятая галочка - прибор висит на предыдущей трубе
@@ -741,9 +783,19 @@ class SchemeDiametersForm(forms.WPFWindow):
                 nb_box.IsChecked = True  # первый прибор - всегда новая
                 nb_box.IsEnabled = False
 
+        circ_box = None
+        if self._collector_mode() and has_hw:
+            # циркуляция у прибора в коллекторной системе: Нет/Да/ПС
+            circ_box = ComboBox()
+            circ_box.Width = 52
+            circ_box.ItemsSource = list(CIRC_CHOICES)
+            circ_box.SelectedIndex = (CIRC_CHOICES.index(circ)
+                                      if circ in CIRC_CHOICES else 0)
+            circ_box.ToolTip = u"Циркуляция у прибора: Нет / Да / ПС (полотенцесушитель)"
+
         name_box = ComboBox()
         name_box.IsEditable = True
-        name_box.Width = 170
+        name_box.Width = 150
         name_box.ItemsSource = list(STANDARD_CONSUMERS)
         try:
             name_box.Text = name
@@ -758,10 +810,13 @@ class SchemeDiametersForm(forms.WPFWindow):
             row.Children.Add(nb_box)
         row.Children.Add(name_box)
         row.Children.Add(diam_box)
+        if circ_box is not None:
+            row.Children.Add(circ_box)
         border.Child = row
         self.pnl_consumers.Children.Add(border)
         self._c_rows.append({"border": border, "name": name_box,
-                             "diam": diam_box, "nb": nb_box})
+                             "diam": diam_box, "nb": nb_box,
+                             "circ": circ_box})
 
         # у ComboBox нет TextChanged - ловим всплывающее событие
         # TextChanged внутреннего текстового поля (редактируемый режим);
@@ -774,8 +829,49 @@ class SchemeDiametersForm(forms.WPFWindow):
         if nb_box is not None:
             nb_box.Checked += self._on_consumer_changed
             nb_box.Unchecked += self._on_consumer_changed
+        if circ_box is not None:
+            circ_box.SelectionChanged += self._on_consumer_changed
         border.MouseLeftButtonUp += (
             lambda s, e, i=idx: self._select_c_row(i))
+
+    def _add_circ_tee_row(self, circ_tee):
+        """Строка «Циркуляция ГВ» в конце С2 (тройниковая система)."""
+        border = Border()
+        border.Padding = Thickness(4, 2, 4, 2)
+        row = StackPanel()
+        row.Orientation = Orientation.Horizontal
+        lbl = TextBlock()
+        lbl.Text = u"Циркуляция ГВ:"
+        lbl.VerticalAlignment = VerticalAlignment.Center
+        lbl.Margin = Thickness(0, 0, 6, 0)
+        box = ComboBox()
+        box.Width = 130
+        box.ItemsSource = list(TEE_CIRC_CHOICES)
+        box.SelectedIndex = (TEE_CIRC_CHOICES.index(circ_tee)
+                             if circ_tee in TEE_CIRC_CHOICES else 0)
+        box.SelectionChanged += self._on_circ_tee_changed
+        box.ToolTip = (u"Полотенцесушитель / Рециркуляция (d16) добавляются "
+                       u"в конец цепочки помещения на виде ГВ; "
+                       u"«Нет циркуляции» - ничего не добавляется")
+        row.Children.Add(lbl)
+        row.Children.Add(box)
+        border.Child = row
+        self.pnl_consumers.Children.Add(border)
+        self._circ_tee_box = box
+
+    def _on_circ_tee_changed(self, sender, args):
+        """Выбран вариант циркуляции ГВ (тройниковая система)."""
+        key = self._selected_key
+        if key is None:
+            return
+        try:
+            idx = self._circ_tee_box.SelectedIndex
+            self._cfg.setdefault(key, {})[u"circ_tee"] = (
+                TEE_CIRC_CHOICES[idx] if idx is not None
+                and 0 <= idx < len(TEE_CIRC_CHOICES) else TEE_CIRC_NONE)
+        except Exception:
+            pass
+        save_config(self._cfg)
 
     def _select_c_row(self, idx):
         self._c_selected = idx
@@ -802,7 +898,16 @@ class SchemeDiametersForm(forms.WPFWindow):
                 nm = u""
             dm = 20 if row["diam"].SelectedIndex == 1 else 16
             nb = bool(row["nb"].IsChecked) if row["nb"] is not None else True
-            consumers.append({u"name": nm, u"diam": dm, u"nb": nb})
+            circ = CIRC_NONE
+            if row["circ"] is not None:
+                try:
+                    i = row["circ"].SelectedIndex
+                    circ = (CIRC_CHOICES[i] if i is not None
+                            and 0 <= i < len(CIRC_CHOICES) else CIRC_NONE)
+                except Exception:
+                    circ = CIRC_NONE
+            consumers.append({u"name": nm, u"diam": dm, u"nb": nb,
+                              u"circ": circ})
         if consumers:
             consumers[0][u"nb"] = True  # первый прибор - всегда новая труба
         item = self._cfg.setdefault(key, {})
@@ -836,7 +941,7 @@ class SchemeDiametersForm(forms.WPFWindow):
                 self.rb_in20.IsChecked = False
                 return
             cfg = self._room_cfg(key)
-            has20 = any(d == 20 for nm, d in cfg["consumers"])
+            has20 = any(c[u"diam"] == 20 for c in cfg["consumers"])
             self.rb_in16.IsEnabled = not has20
             self.rb_in20.IsEnabled = True
             if has20:
@@ -852,6 +957,12 @@ class SchemeDiametersForm(forms.WPFWindow):
         """Имя чертёжного вида - запоминаем по проекту."""
         self._cfg[u"__view_name__"] = unicode(
             self.tb_view_name.Text or u"").strip()
+        save_config(self._cfg)
+
+    def _on_view_hw_changed(self, sender, args):
+        """Имя вида ГВ - запоминаем по проекту."""
+        self._cfg[u"__view_hw__"] = unicode(
+            self.tb_view_hw.Text or u"").strip()
         save_config(self._cfg)
 
     def _on_lbl_changed(self, sender, args):
@@ -925,7 +1036,8 @@ class SchemeDiametersForm(forms.WPFWindow):
         item = self._cfg.setdefault(key, {})
         consumers = item.setdefault("consumers", [])
         consumers.append({u"name": DEFAULT_CONSUMER,
-                          u"diam": DEFAULT_DIAM, u"nb": True})
+                          u"diam": DEFAULT_DIAM, u"nb": True,
+                          u"circ": CIRC_NONE})
         save_config(self._cfg)
         self._update_room_row_colors()
         self._rebuild_c2(select_index=len(consumers) - 1)
@@ -1008,135 +1120,121 @@ class SchemeDiametersForm(forms.WPFWindow):
             logger.error("SchemeDiameters: ошибка отрисовки: %s", exc)
             self._set_status(u"(ошибка: см. лог pyRevit)")
 
-    def _draw_impl(self):
-        global _view_scale
-        view_name = unicode(self.tb_view_name.Text or u"").strip()
-        if not view_name:
-            forms.alert(u"Укажите название вида.", warn_icon=True)
-            return
-        scale_n = parse_scale(unicode(self.tb_scale.Text or u""))
-        if scale_n is None:
-            forms.alert(
-                u"Масштаб в формате 1:N (например, 1:10).",
-                warn_icon=True)
-            return
-
+    def _build_rows(self, is_hw):
+        """Строки таблицы: [(room_text, cons_str, ranges)].
+        ХВ: все приборы. ГВ: без приборов «без горячей воды»,
+        маркеры циркуляции (коллектор), хвост циркуляции (тройниковая)."""
         collector = self._collector_mode()
-        drawing = []
+        rows = []
         total_consumers = 0
         for room in self._rooms:
             cfg = self._room_cfg(room_key(room))
-            consumers = []
+            items = []
             for item in cfg["consumers"]:
                 nm = unicode(item.get(u"name") or u"").strip()
-                if nm:
-                    consumers.append((nm, int(item.get(u"diam") or 16),
-                                      bool(item.get(u"nb", True))))
-            if not consumers:
+                if not nm:
+                    continue
+                if is_hw and nm in NO_HW_CONSUMERS:
+                    continue  # у прибора нет горячей воды
+                items.append((nm, int(item.get(u"diam") or 16),
+                              bool(item.get(u"nb", True)),
+                              item.get(u"circ") or CIRC_NONE))
+            if not items:
                 continue
-            # группы приборов на одной трубе: nb=True начинает новую;
-            # внутри группы (2+ приборов) в коллекторной системе
-            # подчёркиваем - видно исключения
-            groups = []
-            for item in consumers:
-                if not groups or item[2]:
-                    groups.append([])
-                groups[-1].append(item)
             parts = []
-            ranges = []  # (начало, конец) приборов на общей трубе
-            for gi, group in enumerate(groups):
-                if gi > 0:
-                    parts.append(u"; ")
-                for ii, (nm, d, nb) in enumerate(group):
-                    if ii > 0:
-                        # разделитель внутри общей трубы подчёркиваем
-                        # вместе с приборами
-                        sep_start = sum(len(p) for p in parts)
-                        sep = u"  -  "
-                        parts.append(sep)
+            ranges = []
+            if is_hw:
+                if collector:
+                    # у каждого прибора своя труба, маркер циркуляции
+                    for i, (nm, d, nb, circ) in enumerate(items):
+                        if i:
+                            parts.append(u"; ")
+                        parts.append(u"{} ∅{} ({})".format(nm, d, circ))
+                else:
+                    # тройниковая: цепочка приборов + хвост циркуляции
+                    for i, (nm, d, nb, circ) in enumerate(items):
+                        if i:
+                            parts.append(u"  -  ")
+                        parts.append(u"{} ∅{}".format(nm, d))
+                    tail = cfg.get(u"circ_tee") or TEE_CIRC_NONE
+                    if tail == TEE_CIRC_PS:
+                        parts.append(u"  -  ")
+                        parts.append(TEE_CIRC_PS)
+                    elif tail == TEE_CIRC_YES:
+                        parts.append(u"  -  ")
+                        parts.append(HW_TAIL_RECIRC)
+                # вид ГВ: помещение без ∅ ввода (по ТЗ 24.11)
+                room_text = self._room_display(room)
+            elif collector:
+                # группы приборов на одной трубе: nb=True начинает
+                # новую; группа из 2+ приборов подчёркивается
+                groups = []
+                for item in items:
+                    if not groups or item[2]:
+                        groups.append([])
+                    groups[-1].append(item)
+                for gi, group in enumerate(groups):
+                    if gi > 0:
+                        parts.append(u"; ")
+                    for ii, (nm, d, nb, circ) in enumerate(group):
+                        if ii > 0:
+                            sep_start = sum(len(p) for p in parts)
+                            sep = u"  -  "
+                            parts.append(sep)
+                            if len(group) > 1:
+                                ranges.append((sep_start,
+                                               sep_start + len(sep)))
+                        start = sum(len(p) for p in parts)
+                        text = u"{} ∅{}".format(nm, d)
+                        parts.append(text)
                         if len(group) > 1:
-                            ranges.append((sep_start,
-                                           sep_start + len(sep)))
-                    start = sum(len(p) for p in parts)
-                    text = u"{} ∅{}".format(nm, d)
-                    parts.append(text)
-                    if len(group) > 1:
-                        ranges.append((start, start + len(text)))
-            cons_str = u"".join(parts)
-            # «текстпомещение»: в коллекторной системе без диаметра -
-            # каждый прибор несёт свой ∅
-            room_text = (self._room_display(room) if collector
-                         else u"{} ∅{}".format(self._room_display(room),
-                                               cfg["input"]))
-            total_consumers += len(consumers)
-            drawing.append((room_text, cons_str, ranges))
-        if not drawing:
-            forms.alert(
-                u"Нет ни одного помещения с потребителями.",
-                warn_icon=True)
-            return
+                            ranges.append((start, start + len(text)))
+                room_text = self._room_display(room)
+            else:
+                for i, (nm, d, nb, circ) in enumerate(items):
+                    if i:
+                        parts.append(u"  -  ")
+                    parts.append(u"{} ∅{}".format(nm, d))
+                room_text = u"{} ∅{}".format(self._room_display(room),
+                                             cfg["input"])
+            total_consumers += len(items)
+            rows.append((room_text, u"".join(parts), ranges))
+        return rows, total_consumers
 
-        missing = missing_assets()
-        if missing:
-            # подсказка: какие типы текста реально есть в проекте
-            avail = []
-            try:
-                for t in DB.FilteredElementCollector(doc).OfClass(
-                        DB.TextNoteType).ToElements():
-                    nm = element_name_safe(
-                        t, (DB.BuiltInParameter.ALL_MODEL_TYPE_NAME,))
-                    if nm.strip():
-                        avail.append(nm.strip())
-            except Exception:
-                pass
-            avail.sort()
-            hint = u""
-            if avail:
-                hint = (u"\n\nТипы текста в проекте:\n"
-                        + u"\n".join(u"- " + a for a in avail[:25]))
-                if len(avail) > 25:
-                    hint += u"\n- ... и ещё {}".format(len(avail) - 25)
-            forms.alert(
-                u"В проекте не найдено:\n" + u"\n".join(missing) + hint,
-                title="Не хватает ресурсов проекта",
-                warn_icon=True)
-            return
-
-        pipe_id = None  # линии в упрощённой схеме не рисуются
-        small_id = find_text_type_id(TEXT_SMALL)
-        big_id = find_text_type_id(TEXT_BIG)
-        drafting_type_id = find_drafting_type_id()
-
-        warnings = []
-        # размещения старого вида на листах - запоминаем ДО перезаписи
-        # (Viewport знает лист и точку, где лежал вид)
+    def _draw_one_scheme(self, small_id, title_id, drafting_type_id,
+                         scale_n, view_name, title_text, sub_text, rows,
+                         total_consumers, warnings,
+                         gap_title, gap_rows, gap_cols):
+        """Полный цикл одной схемы: перезапись -> рисование -> удаление
+        старых видов -> возврат на листы. Возвращает
+        (число строк, приборов, размещений, всего размещений)."""
+        global _view_scale
         placements = collect_viewports([view_name])
 
-        # перезапись: старый вид переименовывается в «<имя>_СТАРАЯ» -
-        # имя освобождается даже если вид открыт в Revit (удаление
-        # открытого вида API запрещает, переименование - нет)
         renamed = []
         with revit.Transaction(u"ПлагИН: перезапись схемы", doc):
             renamed = rename_views_by_name(view_name)
         if renamed:
-            warnings.append(u"прежний вид переименован в «{}»".format(
-                u"», «".join(renamed)))
+            warnings.append(u"«{}»: прежний вид переименован в «{}»".format(
+                view_name, u"», «".join(renamed)))
         elif views_with_name(view_name):
             warnings.append(
-                u"не удалось освободить имя «{}»".format(view_name))
+                u"«{}»: не удалось освободить имя".format(view_name))
 
         with revit.Transaction(u"ПлагИН: рисование схемы диаметров", doc):
             view = DB.ViewDrafting.Create(doc, drafting_type_id)
             try:
                 view.Name = view_name
             except Exception as exc:
-                warnings.append(u"имя вида не записано: {}".format(exc))
+                warnings.append(u"«{}»: имя вида не записано: {}".format(
+                    view_name, exc))
                 logger.debug("SchemeDiameters: имя вида: %s", exc)
             try:
                 view.Scale = scale_n
                 _view_scale = scale_n
             except Exception as exc:
-                warnings.append(u"масштаб вида не записан")
+                warnings.append(u"«{}»: масштаб вида не записан".format(
+                    view_name))
                 logger.debug("SchemeDiameters: масштаб вида: %s", exc)
 
             for pname, val in (
@@ -1147,41 +1245,92 @@ class SchemeDiametersForm(forms.WPFWindow):
                 except Exception:
                     p = None
                 if p is None or p.IsReadOnly:
-                    warnings.append(u"у вида нет параметра «{}»".format(pname))
+                    warnings.append(
+                        u"«{}»: у вида нет параметра «{}»".format(
+                            view_name, pname))
                 else:
                     p.Set(val)
 
-            n = len(drawing)
+            n = len(rows)
             h_text = text_height_mm(small_id)
-            # заголовок: над таблицей, тип «_5»; центр выставим после
-            # регенерации по фактическим габаритам таблицы
-            title_note = make_text(view, X_RIGHT_ROOM - 300,
-                                   h_text + 70, TITLE_TEXT, big_id)
-            # записки без обёртки (обнимают текст); позицию правим
-            # сдвигом по фактическим габаритам после регенерации
+            # заголовок: над таблицей; для ГВ - подзаголовок под ним
+            # о смысле скобок; центр выставим после регенерации
+            if sub_text:
+                # зазор заголовок/подзаголовок = 1 мм:
+                # верх заголовка = (h+20) + h + 1
+                title_note = make_text(view, X_RIGHT_ROOM - 300,
+                                       h_text * 2 + 21,
+                                       title_text, title_id)
+                sub_note = make_text(view, X_RIGHT_ROOM - 300,
+                                     h_text + 20,
+                                     sub_text, title_id)
+            else:
+                title_note = make_text(view, X_RIGHT_ROOM - 300,
+                                       h_text + 70, title_text, title_id)
+                sub_note = None
+            # записки строк: шаг калибруется по факту - Revit рендерит
+            # текст и позиции с множителем масштаба, поэтому создаём
+            # две первые строки с пробным шагом 100, замеряем
+            # фактическую высоту текста и множитель позиций, затем
+            # шаг = высота текста + ROW_GAP_MM (в мм вида)
             shift_jobs = []  # (note, anchor_mm, "right"/"left")
-            for i, (room_text, cons_str, ranges) in enumerate(drawing):
-                # зазор между строками - 10 мм (19.11е)
-                y = -i * (h_text + 10.0)
 
-                # «текстпомещение» (в коллекторной системе - без ∅,
-                # каждый прибор несёт свой): правый край - X_RIGHT_ROOM
-                room_note = make_text(
-                    view, X_RIGHT_ROOM - 400, y, room_text, small_id)
-                shift_jobs.append((room_note, X_RIGHT_ROOM, u"right"))
-                if not bold_note(room_note):
+            def _mk_row(i, y, row, x_left):
+                room_text, cons_str, ranges = row
+                rn = make_text(view, X_RIGHT_ROOM - 400, y,
+                               room_text, small_id)
+                cn = make_text(view, x_left, y, cons_str, small_id)
+                shift_jobs.append((rn, X_RIGHT_ROOM, u"right"))
+                shift_jobs.append((cn, x_left, u"left"))
+                if not bold_note(rn):
                     warnings.append(
                         u"«{}» без жирного начертания".format(room_text))
-
-                # «текстприборы»: левый край - на X_LEFT_CONS (зазор
-                # одинаковый)
-                cons_note = make_text(view, X_LEFT_CONS, y,
-                                      cons_str, small_id)
-                shift_jobs.append((cons_note, X_LEFT_CONS, u"left"))
-                if ranges and not underline_ranges(cons_note, ranges):
+                if ranges and not underline_ranges(cn, ranges):
                     warnings.append(u"приборы на общей трубе без "
                                     u"подчёркивания (строка «{}»)".format(
                                         room_text))
+                return rn, cn
+
+            probe_raw = 100.0
+            x_left0 = X_RIGHT_ROOM + gap_cols  # start column anchor
+            note_r0, note_c0 = _mk_row(0, 0.0, rows[0], x_left0)
+            s_eff = 1.0
+            pitch = h_text  # запасной шаг, если калибровка не удастся
+            if len(rows) > 1:
+                note_r1, note_c1 = _mk_row(1, -probe_raw, rows[1], x_left0)
+                try:
+                    doc.Regenerate()
+                    bb0 = note_r0.get_BoundingBox(view)
+                    bb1 = note_r1.get_BoundingBox(view)
+                    if bb0 is None or bb1 is None:
+                        raise Exception(u"габариты записок недоступны")
+                    h_render = (bb0.Max.Y - bb0.Min.Y) / MM  # высота
+                    # строки текста на виде (мм, с учётом масштаба)
+                    dist = (bb0.Max.Y - bb1.Max.Y) / MM
+                    s_eff = dist / probe_raw if dist > 0 else 1.0
+                    pitch = h_render / s_eff + gap_rows / s_eff
+                    # строка 1 -> на своё место (кратный шаг)
+                    up_raw = probe_raw - pitch
+                    if abs(up_raw) > 0.1 * MM:
+                        DB.ElementTransformUtils.MoveElement(
+                            doc, note_r1.Id, DB.XYZ(0.0, up_raw * MM, 0.0))
+                        DB.ElementTransformUtils.MoveElement(
+                            doc, note_c1.Id, DB.XYZ(0.0, up_raw * MM, 0.0))
+                except Exception as exc:
+                    logger.debug(
+                        "SchemeDiameters: калибровка шага: %s", exc)
+                    warnings.append(
+                        u"шаг строк по запасному значению (калибровка "
+                        u"не удалась: {})".format(exc))
+            # фактический якорь приборов: зазор помещения/приборы -
+            # gap_cols мм НА ВИДЕ (масштабонезависимо: после сдвигов
+            # позиции якорятся абсолютно)
+            x_left = X_RIGHT_ROOM + gap_cols
+            for j, (note, anchor, side) in enumerate(shift_jobs):
+                if side == u"left":
+                    shift_jobs[j] = (note, x_left, side)
+            for i in range(2, len(rows)):
+                _mk_row(i, -i * pitch, rows[i], x_left)
 
             # одна регенерация, затем выставление краёв записок
             try:
@@ -1204,6 +1353,34 @@ class SchemeDiametersForm(forms.WPFWindow):
                     logger.debug(
                         "SchemeDiameters: позиция записки: %s", exc)
 
+            # заголовок/подзаголовок: ставим по факту - низ заголовка
+            # над верхней строкой на TITLE_GAP_MM (мм на виде),
+            # подзаголовок - на 1 мм под заголовком; затем центрирование
+            try:
+                doc.Regenerate()
+                bb0 = note_r0.get_BoundingBox(view)
+                bb_t = title_note.get_BoundingBox(view)
+                if bb0 is None or bb_t is None:
+                    raise Exception(u"габариты недоступны")
+                need_bottom = bb0.Max.Y + gap_title * MM
+                shift_t = need_bottom - bb_t.Min.Y
+                if abs(shift_t) > 0.1 * MM:
+                    DB.ElementTransformUtils.MoveElement(
+                        doc, title_note.Id, DB.XYZ(0.0, shift_t, 0.0))
+                if sub_note is not None:
+                    bb_t2 = title_note.get_BoundingBox(view)
+                    bb_s = sub_note.get_BoundingBox(view)
+                    if bb_t2 is not None and bb_s is not None:
+                        need_s = bb_t2.Min.Y - 1.0 * MM
+                        shift_s = need_s - bb_s.Max.Y
+                        if abs(shift_s) > 0.1 * MM:
+                            DB.ElementTransformUtils.MoveElement(
+                                doc, sub_note.Id,
+                                DB.XYZ(0.0, shift_s, 0.0))
+            except Exception as exc:
+                logger.debug("SchemeDiameters: позиция заголовка: %s", exc)
+                warnings.append(u"заголовок не установлен: {}".format(exc))
+
             # заголовок - по центру фактических габаритов таблицы
             try:
                 bb_t = title_note.get_BoundingBox(view)
@@ -1214,6 +1391,8 @@ class SchemeDiametersForm(forms.WPFWindow):
                 for tn in DB.FilteredElementCollector(
                         doc, view.Id).OfClass(DB.TextNote).ToElements():
                     if tn.Id == title_note.Id:
+                        continue
+                    if sub_note is not None and tn.Id == sub_note.Id:
                         continue
                     bb = tn.get_BoundingBox(view)
                     if bb is None:
@@ -1228,19 +1407,17 @@ class SchemeDiametersForm(forms.WPFWindow):
                     if abs(shift) > 0.1 * MM:
                         DB.ElementTransformUtils.MoveElement(
                             doc, title_note.Id, DB.XYZ(shift, 0.0, 0.0))
+                        if sub_note is not None:
+                            DB.ElementTransformUtils.MoveElement(
+                                doc, sub_note.Id, DB.XYZ(shift, 0.0, 0.0))
             except Exception as exc:
                 logger.debug("SchemeDiameters: центр заголовка: %s", exc)
                 warnings.append(
                     u"заголовок не отцентрован: {}".format(exc))
 
-            # старые (переименованные) виды удаляются отдельным шагом
-            # ПОСЛЕ транзакции отрисовки (см. ниже): сначала активным
-            # становится новый вид, затем «_СТАРАЯ» удаляется
-
         # переключить активный вид на новый (Revit API не удаляет
-        # АКТИВНЫЙ вид: "ElementId cannot be deleted") и убрать старые
-        # виды: свежепереименованные + хвосты «…_СТАРАЯ*» прошлых
-        # запусков
+        # АКТИВНЫЙ вид) и убрать старые виды: свежепереименованные +
+        # хвосты «…_СТАРАЯ*» прошлых запусков
         if renamed:
             try:
                 revit.uidoc.ActiveView = view
@@ -1337,13 +1514,121 @@ class SchemeDiametersForm(forms.WPFWindow):
                 warnings.append(
                     u"на листы возвращено {} из {} размещений".format(
                         placed, len(placements)))
+        return n, total_consumers, placed, len(placements)
 
-        lines = [u"Создан вид «{}» ({}):".format(view_name, scale_n),
-                 u"помещений {}, потребителей {}".format(
-                     n, total_consumers)]
-        if placements:
-            lines.append(u"возвращён на листы: {} из {}".format(
-                placed, len(placements)))
+    def _draw_impl(self):
+        global _view_scale
+        view_name = unicode(self.tb_view_name.Text or u"").strip()
+        if not view_name:
+            forms.alert(u"Укажите название вида ХВ.", warn_icon=True)
+            return
+        hw_name = unicode(self.tb_view_hw.Text or u"").strip()
+        if hw_name and hw_name == view_name:
+            forms.alert(
+                u"Названия видов ХВ и ГВ должны различаться.",
+                warn_icon=True)
+            return
+        scale_n = parse_scale(unicode(self.tb_scale.Text or u""))
+        if scale_n is None:
+            forms.alert(
+                u"Масштаб в формате 1:N (например, 1:10).",
+                warn_icon=True)
+            return
+
+        # строки таблиц: ХВ - все приборы; ГВ - без «без горячей воды»,
+        # с маркерами циркуляции и хвостом (тройниковая)
+        xv_rows, xv_total = self._build_rows(False)
+        hw_rows, hw_total = self._build_rows(True)
+        schemes = [(view_name, TITLE_TEXT, None, xv_rows, xv_total,
+                    TITLE_GAP_XV)]
+        if hw_name:
+            schemes.append((hw_name, TITLE_TEXT_HW, TITLE_HW_SUB,
+                            hw_rows, hw_total, TITLE_GAP_HW))
+        if not xv_rows and not hw_rows:
+            forms.alert(
+                u"Нет ни одного помещения с потребителями.",
+                warn_icon=True)
+            return
+        if not xv_rows:
+            forms.alert(
+                u"Вид ХВ пропущен: нет приборов; заполните вид ХВ.",
+                warn_icon=True)
+            return
+
+        missing = missing_assets()
+        if missing:
+            # подсказка: какие типы текста реально есть в проекте
+            avail = []
+            try:
+                for t in DB.FilteredElementCollector(doc).OfClass(
+                        DB.TextNoteType).ToElements():
+                    nm = element_name_safe(
+                        t, (DB.BuiltInParameter.ALL_MODEL_TYPE_NAME,))
+                    if nm.strip():
+                        avail.append(nm.strip())
+            except Exception:
+                pass
+            avail.sort()
+            hint = u""
+            if avail:
+                hint = (u"\n\nТипы текста в проекте:\n"
+                        + u"\n".join(u"- " + a for a in avail[:25]))
+                if len(avail) > 25:
+                    hint += u"\n- ... и ещё {}".format(len(avail) - 25)
+            forms.alert(
+                u"В проекте не найдено:\n" + u"\n".join(missing) + hint,
+                title="Не хватает ресурсов проекта",
+                warn_icon=True)
+            return
+
+        small_id = find_text_type_id(TEXT_SMALL)
+        title_id = find_text_type_id(TITLE_TYPE)
+        drafting_type_id = find_drafting_type_id()
+
+        # зазор между строками - 0 (константа, калибруется по факту);
+        # зазор помещения/приборы: 60 мм при 1:10, пропорционально
+        # масштабу; зазор заголовок/строки - свой для ХВ (80) и ГВ (100)
+        gap_rows = ROW_GAP_MM
+        gap_cols = GAP_COLS_BASE * scale_n / 10.0
+
+        warnings = []
+        # где находился пользователь при вызове плагина - вернём туда
+        # в конце (если этот вид/лист не был перезаписан)
+        orig_active_id = None
+        try:
+            orig_active_id = revit.uidoc.ActiveView.Id
+        except Exception:
+            pass
+        lines = []
+        for view_n, title, sub, rows, total, gap_title_base in schemes:
+            gap_title = gap_title_base * scale_n / 10.0
+            try:
+                n, total_c, placed, placements = self._draw_one_scheme(
+                    small_id, title_id, drafting_type_id, scale_n,
+                    view_n, title, sub, rows, total, warnings,
+                    gap_title, gap_rows, gap_cols)
+                lines.append(
+                    u"Создан вид «{}» ({}): помещений {}, "
+                    u"потребителей {}".format(view_n, scale_n,
+                                              n, total_c))
+                if placements:
+                    lines.append(u"возвращён на листы: {} из {}".format(
+                        placed, placements))
+            except Exception as exc:
+                logger.error("SchemeDiameters: схема «%s»: %s",
+                             view_n, exc)
+                warnings.append(u"«{}»: ошибка отрисовки: {}".format(
+                    view_n, exc))
+
+        # вернуть пользователя туда, где он был (вид/лист на момент
+        # вызова), если этот вид не был перезаписан
+        try:
+            orig = doc.GetElement(orig_active_id) if orig_active_id else None
+            if orig is not None:
+                revit.uidoc.ActiveView = orig
+        except Exception as exc:
+            logger.debug("SchemeDiameters: возврат активного вида: %s", exc)
+
         if warnings:
             lines.append(u"Замечания:")
             lines.extend(u"- " + w for w in warnings)

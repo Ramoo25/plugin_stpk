@@ -22,6 +22,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
@@ -37,19 +38,28 @@
       </Grid>
       <ComboBox Grid.Row="2" x:Name="cb_source" Height="24" Margin="0,4,0,10"/>
 
-      <TextBlock Grid.Row="3" Text="Копируем в шаблон вида:"/>
-      <Grid Grid.Row="4" Margin="0,4,0,4">
+      <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,4">
+        <TextBlock Text="Копируем в:" VerticalAlignment="Center"/>
+        <RadioButton x:Name="rb_tgt_tmpl" Content="шаблон вида" GroupName="tgt"
+                     IsChecked="True" Margin="10,0,0,0" VerticalAlignment="Center"/>
+        <RadioButton x:Name="rb_tgt_view" Content="вид" GroupName="tgt"
+                     Margin="10,0,0,0" VerticalAlignment="Center"
+                     ToolTip="Скопировать фильтры в конкретный вид (без шаблона)"/>
+      </StackPanel>
+
+      <TextBlock Grid.Row="4" x:Name="lbl_target" Text="Копируем в шаблон вида:"/>
+      <Grid Grid.Row="5" Margin="0,4,0,4">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <TextBlock Text="Содержит:" VerticalAlignment="Center" Margin="0,0,6,0"/>
         <TextBox Grid.Column="1" x:Name="tb_tgt_search" Height="24"
-                 ToolTip="Фильтр списка шаблонов-приёмников по части имени"/>
+                 ToolTip="Фильтр списка приёмников по части имени (слова через пробел = «И»)"/>
       </Grid>
-      <ComboBox Grid.Row="5" x:Name="cb_target" Height="24" Margin="0,4,0,10"/>
+      <ComboBox Grid.Row="6" x:Name="cb_target" Height="24" Margin="0,4,0,10"/>
 
-      <Grid Grid.Row="6" Margin="0,0,0,4">
+      <Grid Grid.Row="7" Margin="0,0,0,4">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
@@ -59,7 +69,7 @@
                  ToolTip="Фильтр списка фильтров по части имени; «Выделить» отмечает только видимые после фильтра"/>
       </Grid>
 
-      <Grid Grid.Row="7">
+      <Grid Grid.Row="8">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="*"/>

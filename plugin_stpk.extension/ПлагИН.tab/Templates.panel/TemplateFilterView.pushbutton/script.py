@@ -2,7 +2,8 @@
 """«ШаблонФильтрВид» - плагин №5 набора plugin_stpk (IronPython 2.7).
 
 Копирование фильтров с настройками отображения (цвет, прозрачность,
-толщина, скрыть/показать) из одного шаблона вида в другой. Фильтры,
+толщина, скрыть/показать) из шаблона вида в шаблон вида ИЛИ в
+конкретный вид (радио «Копируем в: шаблон вида / вид»). Фильтры,
 уже существующие в приёмнике, перезаписываются настройками источника;
 их отсутствие в приёмнике - добавляются.
 
@@ -80,6 +81,33 @@ def collect_templates(doc):
     return pairs
 
 
+def collect_views(doc):
+    """Обычные виды проекта (не шаблоны; без спецификаций, легенд,
+    чертёжных видов, листов, системных браузеров): [(подпись, view)],
+    натурально по имени."""
+    skip = set()
+    for attr in ("Legend", "DraftingView", "Schedule", "ColumnSchedule",
+                 "PanelSchedule", "Sheet", "SystemBrowser", "Report",
+                 "Internal", "Undefined"):
+        if hasattr(DB.ViewType, attr):
+            skip.add(getattr(DB.ViewType, attr))
+    pairs = []
+    for view in DB.FilteredElementCollector(doc).OfClass(
+            DB.View).WhereElementIsNotElementType().ToElements():
+        try:
+            if view.IsTemplate:
+                continue
+            if view.ViewType in skip:
+                continue
+        except Exception:
+            continue
+        name = element_name_safe(view, (DB.BuiltInParameter.VIEW_NAME,))
+        if name:
+            pairs.append((name, view))
+    pairs.sort(key=lambda t: natural_key(t[0]))
+    return pairs
+
+
 def collect_filters(doc, view):
     """Фильтры, применённые к шаблону: [(имя, filter_id)], по имени."""
     items = []
@@ -97,6 +125,8 @@ class TemplateFilterForm(forms.WPFWindow):
         forms.WPFWindow.__init__(self, "ui.xaml")
 
         self._templates = collect_templates(doc)
+        self._views = collect_views(doc)
+        self._tgt_mode = u"tmpl"  # приёмник: tmpl - шаблон, view - вид
 
         names = [t[0] for t in self._templates]
         self.cb_source.ItemsSource = names
@@ -118,6 +148,8 @@ class TemplateFilterForm(forms.WPFWindow):
 
         self.cb_source.SelectionChanged += self._on_template_changed
         self.cb_target.SelectionChanged += self._on_template_changed
+        self.rb_tgt_tmpl.Checked += self._on_tgt_mode_changed
+        self.rb_tgt_view.Checked += self._on_tgt_mode_changed
         self.tb_src_search.TextChanged += self._on_src_search_changed
         self.tb_tgt_search.TextChanged += self._on_tgt_search_changed
         self.tb_search.TextChanged += self._on_search_changed
@@ -147,15 +179,36 @@ class TemplateFilterForm(forms.WPFWindow):
         low = text.lower()
         return all(part in low for part in parts)
 
+    def _tgt_is_view(self):
+        """True - приёмник «вид» (радио); False - шаблон вида."""
+        try:
+            return bool(self.rb_tgt_view.IsChecked)
+        except Exception:
+            return False
+
+    def _on_tgt_mode_changed(self, sender, args):
+        """Переключение приёмника: шаблон вида / вид."""
+        self._tgt_mode = u"view" if self._tgt_is_view() else u"tmpl"
+        self.lbl_target.Text = (u"Копируем в вид:"
+                                if self._tgt_mode == u"view"
+                                else u"Копируем в шаблон вида:")
+        self.cb_target.SelectedIndex = -1
+        self._apply_template_filter(self.cb_target, self.tb_tgt_search)
+
     def _apply_template_filter(self, combo, search_box):
-        """Пересборка выпадающего списка шаблонов по тексту «Содержит:».
+        """Пересборка выпадающего списка по тексту «Содержит:»
+        (шаблоны или виды - для приёмника зависит от радио).
 
         Выбор сохраняется, если шаблон остался в отфильтрованном списке;
         иначе выбор сбрасывается (список фильтров пересоберётся по событию
         SelectionChanged)."""
         query = self._query_of(search_box)
         selected = combo.SelectedItem
-        names = [t[0] for t in self._templates
+        if combo is self.cb_target and self._tgt_is_view():
+            src = self._views
+        else:
+            src = self._templates
+        names = [t[0] for t in src
                  if self._matches_all(t[0], query)]
         combo.ItemsSource = names
         if selected is not None and selected in names:
@@ -168,7 +221,7 @@ class TemplateFilterForm(forms.WPFWindow):
         self._apply_template_filter(self.cb_source, self.tb_src_search)
 
     def _on_tgt_search_changed(self, sender, args):
-        """Фильтр списка «Копируем в шаблон вида»."""
+        """Фильтр списка приёмника (шаблон или вид)."""
         self._apply_template_filter(self.cb_target, self.tb_tgt_search)
 
     def _selected_view(self, combo):
@@ -177,7 +230,11 @@ class TemplateFilterForm(forms.WPFWindow):
         name = combo.SelectedItem
         if idx is None or idx < 0 or not name:
             return None
-        for lbl, view in self._templates:
+        if combo is self.cb_target and self._tgt_is_view():
+            src = self._views
+        else:
+            src = self._templates
+        for lbl, view in src:
             if lbl == name:
                 return view
         return None
@@ -295,7 +352,7 @@ class TemplateFilterForm(forms.WPFWindow):
             source = self._selected_view(self.cb_source)
             target = self._selected_view(self.cb_target)
             if source is None or target is None:
-                forms.alert(u"Выберите оба шаблона.", warn_icon=True)
+                forms.alert(u"Выберите источник и приёмник.", warn_icon=True)
                 return
             if source.Id.IntegerValue == target.Id.IntegerValue:
                 forms.alert(u"Источник и приёмник совпадают.", warn_icon=True)

@@ -1,0 +1,11 @@
+title:
+  ru: МаркаПоиск
+  en_us: Tag Search
+tooltip:
+  ru: Поиск видов, на которых выбранный экземпляр семейства отмечен
+    выбранной маркой (например, «маркой по нескольким категориям»).
+    Выделите элемент в модели до запуска; двойной клик по результату
+    открывает вид.
+  en_us: Find views where the selected family instance is tagged with
+    the chosen tag type. Select an element before running;
+    double-click a result to open the view.
